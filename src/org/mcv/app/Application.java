@@ -1,0 +1,325 @@
+package org.mcv.app;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+
+import jodd.proxetta.MethodInfo;
+import jodd.proxetta.ProxyAspect;
+import jodd.proxetta.impl.ProxyProxetta;
+import jodd.proxetta.pointcuts.ProxyPointcutSupport;
+import lombok.Cleanup;
+import lombok.Data;
+import lombok.ToString;
+import lombok.experimental.Delegate;
+
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+/**
+ * @author Miguelc
+ *
+ */
+@Data
+@ToString(exclude = { "db" })
+public class Application {
+
+	@Delegate
+	Db db;
+	String name;
+	static ObjectMapper mapper;
+	Base log = new Base("log", Base.class);
+	File logLocation;
+	
+	/**
+	 * Constructor.
+	 * 
+	 * @param name
+	 */
+	public Application(String name) {
+		this.name = name;
+		Thread.currentThread().setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() { 
+            public void uncaughtException(Thread t, Throwable e) {
+            	log.error("Uncaught exception", e);
+            }
+        });     
+		db = new Db(this, name);
+		db.createAppTable();
+		db.createLogsTable();
+		if (mapper == null) {
+			mapper = new ObjectMapper();
+			mapper.findAndRegisterModules();
+			mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
+			mapper.setVisibility(PropertyAccessor.GETTER, Visibility.NONE);
+			mapper.setVisibility(PropertyAccessor.IS_GETTER, Visibility.NONE);
+			mapper.setVisibility(PropertyAccessor.SETTER, Visibility.NONE);
+		}
+	}
+
+	/**
+	 * Set the Setter and Method proxies.
+	 * 
+	 * @param base
+	 * @return proxied object
+	 */
+	@SuppressWarnings("unchecked")
+	<T extends Base> T setProxies(T base) {
+		ProxyAspect forSetters = new ProxyAspect(SetterAdvice.class,
+				new ProxyPointcutSupport() {
+					public boolean apply(MethodInfo methodInfo) {
+						return isPublic(methodInfo)
+								&& matchMethodName(methodInfo, "set*")
+								&& hasOneArgument(methodInfo)
+								&& !hasAnnotation(methodInfo, Ignore.class);
+					}
+				});
+		ProxyAspect forMethods = new ProxyAspect(MethodAdvice.class,
+				new ProxyPointcutSupport() {
+					public boolean apply(MethodInfo methodInfo) {
+						if (hasReturnValue(methodInfo)
+								&& (matchMethodName(methodInfo, "get*") || (matchMethodName(
+										methodInfo, "is*")))
+								&& hasNoArguments(methodInfo)) {
+							// getter
+							return false;
+						}
+
+						if (matchMethodName(methodInfo, "set*")
+								&& hasOneArgument(methodInfo)) {
+							// setter
+							return false;
+						}
+						if(hasAnnotation(methodInfo, Ignore.class)) {
+							return false;
+						}
+						return isPublic(methodInfo);
+					}
+				});
+		
+		ProxyProxetta proxetta = ProxyProxetta.withAspects(forSetters,
+				forMethods);
+		proxetta.setVariableClassName(true);
+		try {
+			T ret = (T) proxetta.builder(base.getClass()).define()
+					.getConstructor(String.class, Class.class)
+					.newInstance(base.getName(), base.getClass());
+			copy(base, ret);
+			return ret;
+		} catch (Exception e) {
+			throw new WrapperException(e);
+		}
+	}
+
+	private <T extends Base> void copy(T from, T to) {
+		to.app = from.app;
+		to.children = from.children;
+		to.created = from.created;
+		to.current = from.current;
+		to.deleted = from.deleted;
+		to.json = from.json;
+		to.parent = from.parent;
+		to.version = from.version;
+		jsonClone(from, to);
+	}
+	
+	/**
+	 * Create a NEW base object.
+	 * 
+	 * @param name
+	 * @param clazz
+	 * @return new object
+	 */
+	public <T extends Base> T create(String name, Class<? extends T> clazz) {
+		try {
+			T obj = clazz.getConstructor(String.class, Class.class)
+					.newInstance(name, clazz);
+			obj.app = this;
+			obj.children = new LinkedList<Long>();
+			obj.created = LocalDateTime.now();
+			obj.current = true;
+			obj.deleted = false;
+			obj.parent = 0;
+			obj.version = 1;
+			obj.json = toJson(obj);
+			db.newRecord(obj);
+			return setProxies(obj);
+		} catch (Exception e) {
+			throw new WrapperException(e);
+		}
+	}
+
+	/**
+	 * Serialize an object.
+	 * 
+	 * @param obj
+	 * @return JSON string
+	 */
+	public static String toJson(Object obj) {
+		try {
+			if (obj == null)
+				return "null";
+			return mapper.writeValueAsString(obj);
+		} catch (Exception e) {
+			return String.valueOf(obj);
+		}
+	}
+
+	/**
+	 * Deserialize an object.
+	 * 
+	 * @param json
+	 * @param obj
+	 * @return the object
+	 */
+	public static <T> T fromJson(String json, T obj) {
+		try {
+			return mapper.readValue(json, new TypeReference<T>() {
+			});
+		} catch (Exception e) {
+			throw new WrapperException(e);
+		}
+	}
+
+	/**
+	 * Deserialize an object into an existing object.
+	 * 
+	 * @param from
+	 * @param to
+	 */
+	public static <T extends Base> void jsonClone(T from, T to) {
+		try {
+			mapper.readerForUpdating(to).readValue(from.getJson());
+		} catch (Exception e) {
+			throw new WrapperException(e);
+		}
+	}
+
+	
+	/**
+	 * Redo.
+	 * 
+	 * @param base
+	 */
+	public <T extends Base> void redo(T base) {
+		Base version = db.retrieve(base.getName(), base.getClazz(), base.getChildren().get(0), false);
+		copy(version, base);
+		base.current = true;
+		db.updateCurrent(base);
+	}
+
+	/**
+	 * Undo.
+	 * 
+	 * @param base
+	 */
+	public void undo(Base base) {
+		Base version = db.retrieve(base.getName(), base.getClazz(), base.getParent(), false);
+		copy(version, base);		
+		base.current = true;
+		db.updateCurrent(base);
+	}
+
+	/**
+	 * Redo to specific version.
+	 * 
+	 * @param base
+	 */
+	public void redo(Base base, long version) {
+		Base ver = db.retrieve(base.getName(), base.getClazz(), version, false);
+		copy(ver, base);
+		base.current = true;
+		db.updateCurrent(base);
+	}
+
+	/**
+	 * Make any version the current one.
+	 * 
+	 * @param base
+	 * @param version
+	 */
+	public <T extends Base> void select(T base, T version) {
+		copy(version, base);
+		base.current = true;
+		db.updateCurrent(base);
+	}
+
+	public boolean writeLog(File file, LogEntry entry) {
+        try {
+        	if(!file.getParentFile().exists()) {
+        		file.getParentFile().mkdirs();
+        	}
+            @Cleanup PrintStream out = new PrintStream(new FileOutputStream(file, true), true, "utf-8");
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+            out.printf("%s [%s] %-6s method=%s() caller=%s.%s(%d)%n%s%n",
+            		entry.getTimestamp().format(formatter),
+            		entry.getThread(),
+            		entry.getKind().toString(),
+            		entry.getMethod(),
+            		entry.getCallerClass(),
+            		entry.getCaller(),
+            		entry.getCallerLine(),
+            		formatObjects(entry)
+            );
+            return true;
+        } catch (Exception e) {
+        	System.out.println(e.toString());
+        	return false;
+        }
+	}
+
+	private Object formatObjects(LogEntry entry) {
+		switch(entry.kind) {
+		case SETTER:
+			return "\told value=" + entry.object1 + " new value=" + entry.object2;			
+		case ENTRY:
+			return "\targs=" + entry.object1;			
+		case EXIT:
+			return "\treturn value=" + entry.object1;
+		case WARN:
+		case ERROR:
+			StringBuilder sb = new StringBuilder();
+			if(entry.object1 != null) {
+				sb.append("\texception=").append(entry.object1);
+			}
+			if(entry.message != null) {
+				sb.append("\r\n");
+				sb.append("\tmessage=").append(entry.message);
+			}
+			if(entry.object2 != null) {
+				sb.append("\r\n");
+				sb.append("\tstack=\r\n").append(stack(entry.object2));
+			}
+			return sb.toString();
+		case DEBUG:
+		case INFO:
+			if(entry.getMessage() != null) {
+				return "\tmessage=" + entry.message;
+			}
+		}
+		return null;
+	}
+
+	private String stack(Object trace) {
+		StringBuilder sb = new StringBuilder();
+		if(trace instanceof String) {
+			List<StackTraceElement> stack = fromJson((String)trace, new ArrayList<StackTraceElement>());
+			for(StackTraceElement elt : stack) {
+				sb.append("\t\t").append(elt).append("\r\n");
+			}
+		}
+		if(trace instanceof StackTraceElement[]) {
+			for(StackTraceElement elt : (StackTraceElement[])trace) {
+				sb.append("\t\t").append(elt).append("\r\n");
+			}
+		}
+		return sb.toString();
+	}
+
+}

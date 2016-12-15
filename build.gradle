@@ -1,0 +1,21 @@
+group = 'org.mcv.app'
+version = '1.0'
+
+project.ext {
+    main = "${project.group}.Main"
+	javaVersion = "1.8"
+}
+
+apply from: "${project.localPluginsUrl}/default/1.0/default-1.0.gradle"
+
+dependencies {
+	compile 'com.h2database:h2:1.4.193'
+	compile 'com.fasterxml.jackson.core:jackson-core:2.8.5'
+	compile 'com.fasterxml.jackson.core:jackson-databind:2.8.5'
+	compile 'com.fasterxml.jackson.core:jackson-annotations:2.8.5'
+	compile 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.8.5'
+	compile "org.jodd:jodd-proxetta:3.8.0"
+}
+
+apply from: "${project.localPluginsUrl}/exec/1.0/exec-1.0.gradle"
+
