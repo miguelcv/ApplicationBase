@@ -46,7 +46,7 @@ public class TestApplication {
 		try {
 			assertTrue(app.getDb() != null);
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -65,11 +65,11 @@ public class TestApplication {
 			assertTrue(base != null);
 			//System.out.println("created: " + base.toString());
 			// retrieve
-			Base copy = app.retrieve("base", Base.class);
+			Base copy = app.create("base", Base.class);
 			//System.out.println("retrieved: " + copy.toString());
 			assertTrue(base.equals(copy));
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -88,11 +88,11 @@ public class TestApplication {
 			assertTrue(base != null);
 			//System.out.println(base.toString());
 			// retrieve
-			BaseSub copy = app.retrieve("base", BaseSub.class);
+			BaseSub copy = app.create("base", BaseSub.class);
 			//System.out.println(copy.toString());
 			assertTrue(base.equals(copy));
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -113,17 +113,17 @@ public class TestApplication {
 			base.delete();
 			//System.out.println("deleted: " + base.toString());
 			// retrieve
-			Base copy = app.retrieve("base", Base.class);
+			Base copy = app.create("base", Base.class);
 			if(copy != null) {
 				System.out.println("deleted: " + copy.toString());
 			}
 			assertTrue(copy == null);
 			base.undelete();
-			copy = app.retrieve("base", Base.class);
+			copy = app.create("base", Base.class);
 			assertTrue(copy.equals(base));
 			
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -144,13 +144,11 @@ public class TestApplication {
 			base.setMsg("Changed");
 			//System.out.println("deleted: " + base.toString());
 			// retrieve
-			Base copy = app.retrieve("base", Base.class);
-			if(copy != null) {
-				System.out.println("deleted: " + copy.toString());
-			}
-			assertTrue(copy == null);
+			BaseSub copy = app.create("base", BaseSub.class);
+			assertTrue(copy.equals(base));
+
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -188,7 +186,7 @@ public class TestApplication {
 				assertTrue(base1.equals(base2));				
 			}
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -218,7 +216,7 @@ public class TestApplication {
 				System.out.println(log);
 			}
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -250,7 +248,7 @@ public class TestApplication {
 				System.out.println(log);
 			}
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -365,7 +363,7 @@ public class TestApplication {
 			
 			
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -404,7 +402,7 @@ public class TestApplication {
 			assertEquals("Changed", base.getMsg());
 			
 		} catch(Exception e) {
-			Throwable t = new WrapperException(e).unwrap();
+			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
 		} finally {
@@ -412,7 +410,34 @@ public class TestApplication {
 		}		
 	}
 	
-	// TODO test log to appdir, appfile, basefile
-	// TODO app.getAllLogs
+
+	// app.getAllLogs
+	@Test
+	public void testGetAllLogs() {
+		Application app = mkApp();
+		try {
+			assertTrue(app.getDb() != null);
+			BaseSub base = app.create("base", BaseSub.class);
+			assertTrue(base != null);
+			base.setMsg("Changed");
+			base.setMsg("Changed again");
+			base.setMsg("Changed yet again");
+			base.setMsg("Keep on changing");
+			
+			List<LogEntry> logs = app.getAllLogs();
+			for(LogEntry log : logs) {
+				/* :) */
+				app.log.log(log);
+			}
+			assertTrue(logs.size() > 0);
+		} catch(Exception e) {
+			Throwable t = WrapperException.unwrap(e);
+			log.error("{}", t, t);
+			fail(t.toString());
+		} finally {
+			app.getDb().close();
+		}		
+	}
 	
+
 }

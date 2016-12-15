@@ -7,8 +7,8 @@ public class WrapperException extends RuntimeException {
 		super(e);
 	}
 
-	public Throwable unwrap() {
-		Throwable ret = this;
+	public static Throwable unwrap(Throwable e) {
+		Throwable ret = e;
 		while(ret instanceof WrapperException) {
 			ret = ret.getCause();
 		}

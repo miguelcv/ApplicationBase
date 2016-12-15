@@ -66,7 +66,7 @@ public class Application {
 		} catch (Exception e) {
 			log.warn("Could not load conf/config.props", e);
 		}
-		
+
 		if (mapper == null) {
 			mapper = new ObjectMapper();
 			mapper.findAndRegisterModules();
@@ -86,11 +86,11 @@ public class Application {
 		if (!logLocation.exists()) {
 			log.warn("Location " + logLoc + " does not exist", null);
 		}
-		
+
 		String level = props.getProperty("app.logLevel", "DEBUG");
 		logLevel = Kind.valueOf(level);
 		log.info("Log level = " + level);
-		
+
 		log.info("Application " + name + " initialized.");
 	}
 
@@ -171,18 +171,24 @@ public class Application {
 		try {
 			T obj = db.retrieve(name, clazz);
 			if (obj == null) {
-				obj = clazz.getConstructor(String.class, Class.class)
-						.newInstance(name, clazz);
-				obj.app = this;
-				obj.children = new LinkedList<Long>();
-				obj.created = LocalDateTime.now();
-				obj.current = true;
-				obj.deleted = false;
-				obj.parent = 0;
-				obj.version = 1;
-				obj.json = toJson(obj);
-				db.newRecord(obj);
-				return setProxies(obj);
+				try {
+					obj = clazz.getConstructor(String.class, Class.class)
+							.newInstance(name, clazz);
+					obj.app = this;
+					obj.children = new LinkedList<Long>();
+					obj.created = LocalDateTime.now();
+					obj.current = true;
+					obj.deleted = false;
+					obj.parent = 0;
+					obj.version = 1;
+					obj.json = toJson(obj);
+					db.newRecord(obj);
+					return setProxies(obj);
+				} catch (Exception e) {
+					// unique index violation: object was not retrieved because
+					// deleted!
+					return null;
+				}
 			} else {
 				// return object retrieved from DB
 				return obj;

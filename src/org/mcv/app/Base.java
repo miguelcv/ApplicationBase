@@ -302,7 +302,7 @@ public class Base {
 	 */
 	@Ignore
 	public void warn(String message, Throwable t) {
-		Throwable e = new WrapperException(t).unwrap();
+		Throwable e = WrapperException.unwrap(t);
 		log(Kind.WARN, message, e.toString(), e.getStackTrace());
 	}
 
@@ -314,7 +314,7 @@ public class Base {
 	 */
 	@Ignore
 	public void error(String message, Throwable t) {
-		Throwable e = new WrapperException(t).unwrap();
+		Throwable e = WrapperException.unwrap(t);
 		log(Kind.ERROR, message, e.toString(), e.getStackTrace());
 	}
 

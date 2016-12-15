@@ -33,7 +33,7 @@ public class MethodAdvice implements ProxyAdvice {
 			return retval;
 		} catch (Throwable t) {
 			// ERROR LOG
-			Throwable e = new WrapperException(t).unwrap();
+			Throwable e = WrapperException.unwrap(t);
 			errorLog(base, info, e);
 			throw new WrapperException(e);
 		}

@@ -154,7 +154,7 @@ public class Db {
 	/*
 	 * Create new version based on previous.
 	 */
-	public synchronized <T extends Base> T newVersion(T obj) {
+	synchronized <T extends Base> T newVersion(T obj) {
 		try {
 			// adjust current object
 			long nextNumber = nextNumber(obj); 
@@ -346,11 +346,11 @@ public class Db {
 	 * @param clazz
 	 * @return object
 	 */
-	public <T extends Base> T retrieve(String name, Class<? extends T> clazz) {
+	<T extends Base> T retrieve(String name, Class<? extends T> clazz) {
 		return retrieve(name, clazz, false);
 	}
 	
-	public <T extends Base> T retrieve(String name, Class<? extends T> clazz, boolean noProxy) {
+	<T extends Base> T retrieve(String name, Class<? extends T> clazz, boolean noProxy) {
 		try {
 			@Cleanup
 			PreparedStatement st = conn
@@ -516,6 +516,29 @@ public class Db {
 					.prepareStatement("SELECT * FROM LOGS WHERE NAME = ? AND CLASSNAME = ? ORDER BY STAMP");
 			st.setString(1, name);
 			st.setString(2, clazz);
+			@Cleanup
+			ResultSet rs = st.executeQuery();
+			while (rs.next()) {
+				LogEntry record = makeLogEntry(rs);
+				logs.add(record);
+			}
+			return logs;
+		} catch (Exception e) {
+			throw new WrapperException(e);
+		}
+	}
+
+	/**
+	 * Get all logs.
+	 * 
+	 * @return logs
+	 */
+	public List<LogEntry> getAllLogs() {
+		try {
+			List<LogEntry> logs = new ArrayList<>();
+			@Cleanup
+			PreparedStatement st = conn
+					.prepareStatement("SELECT * FROM LOGS ORDER BY STAMP");
 			@Cleanup
 			ResultSet rs = st.executeQuery();
 			while (rs.next()) {
