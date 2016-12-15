@@ -44,7 +44,7 @@ public class Application {
 	File logLocation;
 	Kind logLevel = Kind.DEBUG;
 	Properties props = new Properties();
-	
+
 	/**
 	 * Constructor.
 	 * 
@@ -53,14 +53,20 @@ public class Application {
 	public Application(String name) {
 		this.name = name;
 		log.app = this;
-		Thread.currentThread().setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() { 
-            public void uncaughtException(Thread t, Throwable e) {
-            	log.error("Uncaught exception", e);
-            }
-        });
-		db = new Db(this, name);
-		db.createAppTable();
-		db.createLogsTable();
+		Thread.currentThread().setUncaughtExceptionHandler(
+				new Thread.UncaughtExceptionHandler() {
+					public void uncaughtException(Thread t, Throwable e) {
+						log.error("Uncaught exception", e);
+					}
+				});
+		try {
+			@Cleanup
+			InputStream is = new FileInputStream("conf/config.props");
+			props.load(is);
+		} catch (Exception e) {
+			log.warn("Could not load conf/config.props", e);
+		}
+		
 		if (mapper == null) {
 			mapper = new ObjectMapper();
 			mapper.findAndRegisterModules();
@@ -69,21 +75,22 @@ public class Application {
 			mapper.setVisibility(PropertyAccessor.IS_GETTER, Visibility.NONE);
 			mapper.setVisibility(PropertyAccessor.SETTER, Visibility.NONE);
 		}
-		try {
-			@Cleanup InputStream is = new FileInputStream("conf/config.props");
-			props.load(is);
-			String logLoc = props.getProperty("app.logLocation");
-			log.info("Log location = " + logLoc);
-			logLocation = new File(logLoc);
-			if(!logLocation.exists()) {
-				log.warn("Location "+logLoc+" does not exist", null);
-			}
-			String level = props.getProperty("app.logLevel", "DEBUG");
-			logLevel = Kind.valueOf(level);
-			log.info("Log level = " + level);
-		} catch(Exception e) {
-			log.warn("Could not load conf/config.props", e);
+
+		db = new Db(this, name);
+		db.createAppTable();
+		db.createLogsTable();
+
+		String logLoc = props.getProperty("app.logLocation");
+		log.info("Log location = " + logLoc);
+		logLocation = new File(logLoc);
+		if (!logLocation.exists()) {
+			log.warn("Location " + logLoc + " does not exist", null);
 		}
+		
+		String level = props.getProperty("app.logLevel", "DEBUG");
+		logLevel = Kind.valueOf(level);
+		log.info("Log level = " + level);
+		
 		log.info("Application " + name + " initialized.");
 	}
 
@@ -120,13 +127,13 @@ public class Application {
 							// setter
 							return false;
 						}
-						if(hasAnnotation(methodInfo, Ignore.class)) {
+						if (hasAnnotation(methodInfo, Ignore.class)) {
 							return false;
 						}
 						return isPublic(methodInfo);
 					}
 				});
-		
+
 		ProxyProxetta proxetta = ProxyProxetta.withAspects(forSetters,
 				forMethods);
 		proxetta.setVariableClassName(true);
@@ -152,7 +159,7 @@ public class Application {
 		to.version = from.version;
 		jsonClone(from, to);
 	}
-	
+
 	/**
 	 * Create a NEW base object.
 	 * 
@@ -162,18 +169,24 @@ public class Application {
 	 */
 	public <T extends Base> T create(String name, Class<? extends T> clazz) {
 		try {
-			T obj = clazz.getConstructor(String.class, Class.class)
-					.newInstance(name, clazz);
-			obj.app = this;
-			obj.children = new LinkedList<Long>();
-			obj.created = LocalDateTime.now();
-			obj.current = true;
-			obj.deleted = false;
-			obj.parent = 0;
-			obj.version = 1;
-			obj.json = toJson(obj);
-			db.newRecord(obj);
-			return setProxies(obj);
+			T obj = db.retrieve(name, clazz);
+			if (obj == null) {
+				obj = clazz.getConstructor(String.class, Class.class)
+						.newInstance(name, clazz);
+				obj.app = this;
+				obj.children = new LinkedList<Long>();
+				obj.created = LocalDateTime.now();
+				obj.current = true;
+				obj.deleted = false;
+				obj.parent = 0;
+				obj.version = 1;
+				obj.json = toJson(obj);
+				db.newRecord(obj);
+				return setProxies(obj);
+			} else {
+				// return object retrieved from DB
+				return obj;
+			}
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
@@ -225,14 +238,14 @@ public class Application {
 		}
 	}
 
-	
 	/**
 	 * Redo.
 	 * 
 	 * @param base
 	 */
 	public <T extends Base> void redo(T base) {
-		Base version = db.retrieve(base.getName(), base.getClazz(), base.getChildren().get(0), false);
+		Base version = db.retrieve(base.getName(), base.getClazz(), base
+				.getChildren().get(0), false);
 		copy(version, base);
 		base.current = true;
 		db.updateCurrent(base);
@@ -244,8 +257,9 @@ public class Application {
 	 * @param base
 	 */
 	public void undo(Base base) {
-		Base version = db.retrieve(base.getName(), base.getClazz(), base.getParent(), false);
-		copy(version, base);		
+		Base version = db.retrieve(base.getName(), base.getClazz(),
+				base.getParent(), false);
+		copy(version, base);
 		base.current = true;
 		db.updateCurrent(base);
 	}
@@ -275,56 +289,55 @@ public class Application {
 	}
 
 	public boolean writeLog(File file, LogEntry entry) {
-        try {
-        	if(!file.getParentFile().exists()) {
-        		file.getParentFile().mkdirs();
-        	}
-            @Cleanup PrintStream out = new PrintStream(new FileOutputStream(file, true), true, "utf-8");
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-            out.printf("%s [%s] %-6s method=%s() caller=%s.%s(%d)%n%s%n",
-            		entry.getTimestamp().format(formatter),
-            		entry.getThread(),
-            		entry.getKind().toString(),
-            		entry.getMethod(),
-            		entry.getCallerClass(),
-            		entry.getCaller(),
-            		entry.getCallerLine(),
-            		formatObjects(entry)
-            );
-            return true;
-        } catch (Exception e) {
-        	return false;
-        }
+		try {
+			if (!file.getParentFile().exists()) {
+				file.getParentFile().mkdirs();
+			}
+			@Cleanup
+			PrintStream out = new PrintStream(new FileOutputStream(file, true),
+					true, "utf-8");
+			DateTimeFormatter formatter = DateTimeFormatter
+					.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+			out.printf("%s [%s] %-6s method=%s() caller=%s.%s(%d)%n%s%n", entry
+					.getTimestamp().format(formatter), entry.getThread(), entry
+					.getKind().toString(), entry.getMethod(), entry
+					.getCallerClass(), entry.getCaller(),
+					entry.getCallerLine(), formatObjects(entry));
+			return true;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 
 	private Object formatObjects(LogEntry entry) {
-		switch(entry.kind) {
+		switch (entry.kind) {
 		case NONE:
 			return "";
 		case SETTER:
-			return "\told value=" + entry.object1 + " new value=" + entry.object2;			
+			return "\told value=" + entry.object1 + " new value="
+					+ entry.object2;
 		case ENTRY:
-			return "\targs=" + entry.object1;			
+			return "\targs=" + entry.object1;
 		case EXIT:
 			return "\treturn value=" + entry.object1;
 		case WARN:
 		case ERROR:
 			StringBuilder sb = new StringBuilder();
-			if(entry.object1 != null) {
+			if (entry.object1 != null) {
 				sb.append("\texception=").append(entry.object1);
 			}
-			if(entry.message != null) {
+			if (entry.message != null) {
 				sb.append("\r\n");
 				sb.append("\tmessage=").append(entry.message);
 			}
-			if(entry.object2 != null) {
+			if (entry.object2 != null) {
 				sb.append("\r\n");
 				sb.append("\tstack=\r\n").append(stack(entry.object2));
 			}
 			return sb.toString();
 		case DEBUG:
 		case INFO:
-			if(entry.getMessage() != null) {
+			if (entry.getMessage() != null) {
 				return "\tmessage=" + entry.message;
 			}
 		}
@@ -333,14 +346,15 @@ public class Application {
 
 	private String stack(Object trace) {
 		StringBuilder sb = new StringBuilder();
-		if(trace instanceof String) {
-			List<StackTraceElement> stack = fromJson((String)trace, new ArrayList<StackTraceElement>());
-			for(StackTraceElement elt : stack) {
+		if (trace instanceof String) {
+			List<StackTraceElement> stack = fromJson((String) trace,
+					new ArrayList<StackTraceElement>());
+			for (StackTraceElement elt : stack) {
 				sb.append("\t\t").append(elt).append("\r\n");
 			}
 		}
-		if(trace instanceof StackTraceElement[]) {
-			for(StackTraceElement elt : (StackTraceElement[])trace) {
+		if (trace instanceof StackTraceElement[]) {
+			for (StackTraceElement elt : (StackTraceElement[]) trace) {
 				sb.append("\t\t").append(elt).append("\r\n");
 			}
 		}
