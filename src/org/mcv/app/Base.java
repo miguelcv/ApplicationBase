@@ -1,11 +1,17 @@
 package org.mcv.app;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Properties;
 
-import lombok.Data;
+import lombok.Cleanup;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import org.mcv.app.LogEntry.Kind;
 
@@ -15,10 +21,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  * @author Miguelc
  *
  */
-@Data
+@Getter
+@ToString
+@EqualsAndHashCode
 public class Base {
 
-	// ID
+	// ID fields
 	final String name;
 	final Class<? extends Base> clazz;
 
@@ -31,6 +39,26 @@ public class Base {
 	public Base(String name, Class<? extends Base> clazz) {
 		this.name = name;
 		this.clazz = clazz;
+		try {
+			Properties props = new Properties();
+			@Cleanup InputStream is = new FileInputStream("conf/config.props");
+			props.load(is);
+			String logLoc = props.getProperty(clazz.getCanonicalName()+"."+name+".logLocation", 
+					props.getProperty(clazz.getCanonicalName()+".logLocation", 
+							props.getProperty("app.logLocation")));
+			info("Log location = " + logLoc);
+			logLocation = new File(logLoc);
+			if(!logLocation.exists()) {
+				warn("Location "+logLoc+" does not exist", null);
+			}
+			String level = props.getProperty(clazz.getCanonicalName()+"."+name+".logLevel", 
+					props.getProperty(clazz.getCanonicalName()+".logLevel", 
+							props.getProperty("app.logLevel", "DEBUG")));
+			logLevel = Kind.valueOf(level);
+			info("Log level = " + level);
+		} catch(Exception e) {
+			warn("Could not load conf/config.props", e);
+		}		
 	}
 
 	long version;
@@ -39,21 +67,31 @@ public class Base {
 	LocalDateTime created;
 	boolean current;
 	boolean deleted;
+	
 	@JsonIgnore
-	@Getter
 	boolean inBatch;
 	@JsonIgnore
 	String json;
 	@JsonIgnore
 	Application app;
+	@JsonIgnore @Setter
 	File logLocation;
+	@JsonIgnore
+	Kind logLevel;
 
+	public void setLogLevel(Kind kind) {
+		logLevel = kind;
+		if(kind == Kind.ENTRY) logLevel = Kind.INFO;
+		if(kind == Kind.EXIT) logLevel = Kind.INFO;
+		if(kind == Kind.SETTER) logLevel = Kind.INFO;
+	}
+	
 	/**
 	 * Delete this object.
 	 */
 	public void delete() {
 		if (current) {
-			setDeleted(true);
+			deleted = true;
 			app.getDb().storeDeleted(this);
 		}
 	}
@@ -68,17 +106,18 @@ public class Base {
 		}
 	}
 
-	void addChild(long version) {
-		if (current && !deleted) {
-			children.add(version);
-		}
-	}
-
 	/**
 	 * Persist this object.
 	 */
 	public void store() {
 		app.store(this);
+	}
+
+	/**
+	 * Batch persistence until explicit store()
+	 */
+	public void startBatch() {
+		inBatch = true;
 	}
 
 	/**
@@ -168,25 +207,52 @@ public class Base {
 
 	@Ignore
 	void log(LogEntry entry) {
+		if(app == null) return;
 		app.storeLogEntry(entry);
-		if (logLocation != null) {
-			if (logLocation.isDirectory()) {
-				app.writeLog(new File(logLocation, clazz.getCanonicalName()
-						+ "." + name), entry);
-			} else {
-				app.writeLog(logLocation, entry);
-			}
-		} else if (app.logLocation != null) {
-			if (app.logLocation.isDirectory()) {
-				app.writeLog(new File(app.logLocation, clazz.getCanonicalName()
-						+ "." + name), entry);
+		if (filter(entry)) {
+			if (logLocation != null) {
+				if (logLocation.isDirectory()) {
+					app.writeLog(new File(logLocation, clazz.getCanonicalName()
+							+ "." + name + ".log"), entry);
+				} else {
+					app.writeLog(logLocation, entry);
+				}
+			} else if (app.logLocation != null) {
+				if (app.logLocation.isDirectory()) {
+					app.writeLog(
+							new File(app.logLocation, clazz.getCanonicalName()
+									+ "." + name + ".log"), entry);
 
-			} else {
-				app.writeLog(app.logLocation, entry);
+				} else {
+					app.writeLog(app.logLocation, entry);
+				}
 			}
-		}		
+		}
 	}
-	
+
+	private boolean filter(LogEntry entry) {
+		// loglevel = DEBUG, INFO, WARN, ERROR, NONE
+		
+		if(logLevel == null) {
+			logLevel = app.logLevel;
+		}
+		
+		switch(entry.kind) {
+		case DEBUG:
+			return logLevel == Kind.DEBUG;
+		case INFO:
+		case ENTRY:
+		case EXIT:
+		case SETTER:
+			return logLevel == Kind.DEBUG || logLevel == Kind.INFO;
+		case WARN:
+			return logLevel != Kind.ERROR || logLevel != Kind.NONE;
+		case ERROR:
+		default:
+			return logLevel != Kind.NONE;
+		}
+	}
+
 	@Ignore
 	void log(Kind kind, String message, Object object1, Object object2) {
 		StackTraceElement caller = Thread.currentThread().getStackTrace()[3];

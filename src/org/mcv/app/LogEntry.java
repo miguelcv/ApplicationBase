@@ -12,7 +12,7 @@ import lombok.Data;
 public class LogEntry {
 
 	public enum Kind {
-		DEBUG, INFO, ENTRY, EXIT, SETTER, WARN, ERROR;
+		DEBUG, INFO, ENTRY, EXIT, SETTER, WARN, ERROR, NONE;
 
 		public static Kind fromInteger(int val) {
 			switch (val) {
@@ -29,8 +29,10 @@ public class LogEntry {
 			case 5:
 				return WARN;
 			case 6:
-			default:
 				return ERROR;
+			case 7:
+			default:
+				return NONE;
 			}
 		}
 	};

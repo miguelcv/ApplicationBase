@@ -233,7 +233,7 @@ public class TestApplication {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
 			assertTrue(base != null);
-			base.setInBatch(true);
+			base.startBatch();
 			base.setMsg("Changed");
 			base.setMsg("Changed again");
 			base.setMsg("Changed yet again");
@@ -411,6 +411,8 @@ public class TestApplication {
 			app.getDb().close();
 		}		
 	}
-
+	
+	// TODO test log to appdir, appfile, basefile
+	// TODO app.getAllLogs
 	
 }

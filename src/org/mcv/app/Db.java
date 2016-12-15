@@ -34,7 +34,8 @@ public class Db {
 	private Connection getConnection(String name) {
 		try {
 			Class.forName("org.h2.Driver");
-			String connString = "jdbc:h2:./" + name;
+			String format = app.getProps().getProperty("h2.url", "jdbc:h2:./%s"); 
+			String connString = String.format(format, name);
 			Connection conn = DriverManager.getConnection(connString, "", "");
 			return conn;
 		} catch (Exception e) {
@@ -161,9 +162,7 @@ public class Db {
 			Map<String, Object> map = Application.fromJson(obj.getJson(), new HashMap<String, Object>()); 
 			map.put("current", false);
 			map.put("children", obj.children);
-			//System.out.printf("Old JSON = %s%n", obj.json);
 			obj.json = Application.toJson(map);
-			//System.out.printf("New JSON = %s%n", obj.json);
 			update(obj, false, obj.children, obj.json);
 			
 			// create new version
@@ -174,7 +173,6 @@ public class Db {
 			obj.parent = obj.getVersion();
 			obj.version = nextNumber;
 			obj.json = Application.toJson(obj);
-			//System.out.printf("Next JSON = %s%n", obj.json);
 
 			newRecord(obj);
 			return obj;

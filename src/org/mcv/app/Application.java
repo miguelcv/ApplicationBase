@@ -1,13 +1,16 @@
 package org.mcv.app;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Properties;
 
 import jodd.proxetta.MethodInfo;
 import jodd.proxetta.ProxyAspect;
@@ -17,6 +20,8 @@ import lombok.Cleanup;
 import lombok.Data;
 import lombok.ToString;
 import lombok.experimental.Delegate;
+
+import org.mcv.app.LogEntry.Kind;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
@@ -28,7 +33,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *
  */
 @Data
-@ToString(exclude = { "db" })
+@ToString(exclude = { "db", "props", "log", "logLocation", "logLevel" })
 public class Application {
 
 	@Delegate
@@ -37,6 +42,8 @@ public class Application {
 	static ObjectMapper mapper;
 	Base log = new Base("log", Base.class);
 	File logLocation;
+	Kind logLevel = Kind.DEBUG;
+	Properties props = new Properties();
 	
 	/**
 	 * Constructor.
@@ -45,11 +52,12 @@ public class Application {
 	 */
 	public Application(String name) {
 		this.name = name;
+		log.app = this;
 		Thread.currentThread().setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() { 
             public void uncaughtException(Thread t, Throwable e) {
             	log.error("Uncaught exception", e);
             }
-        });     
+        });
 		db = new Db(this, name);
 		db.createAppTable();
 		db.createLogsTable();
@@ -61,6 +69,22 @@ public class Application {
 			mapper.setVisibility(PropertyAccessor.IS_GETTER, Visibility.NONE);
 			mapper.setVisibility(PropertyAccessor.SETTER, Visibility.NONE);
 		}
+		try {
+			@Cleanup InputStream is = new FileInputStream("conf/config.props");
+			props.load(is);
+			String logLoc = props.getProperty("app.logLocation");
+			log.info("Log location = " + logLoc);
+			logLocation = new File(logLoc);
+			if(!logLocation.exists()) {
+				log.warn("Location "+logLoc+" does not exist", null);
+			}
+			String level = props.getProperty("app.logLevel", "DEBUG");
+			logLevel = Kind.valueOf(level);
+			log.info("Log level = " + level);
+		} catch(Exception e) {
+			log.warn("Could not load conf/config.props", e);
+		}
+		log.info("Application " + name + " initialized.");
 	}
 
 	/**
@@ -269,13 +293,14 @@ public class Application {
             );
             return true;
         } catch (Exception e) {
-        	System.out.println(e.toString());
         	return false;
         }
 	}
 
 	private Object formatObjects(LogEntry entry) {
 		switch(entry.kind) {
+		case NONE:
+			return "";
 		case SETTER:
 			return "\told value=" + entry.object1 + " new value=" + entry.object2;			
 		case ENTRY:
