@@ -4,7 +4,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -40,6 +39,7 @@ public class Db {
 			Connection conn = DriverManager.getConnection(connString, "", "");
 			return conn;
 		} catch (Exception e) {
+			app.log.error("Error connecting to DB", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -50,8 +50,8 @@ public class Db {
 	public void close() {
 		try {
 			conn.close();
-		} catch (SQLException e) {
-			// log.error("{}", e, e);
+		} catch (Exception e) {
+			app.log.error("Error disconnecting from DB", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -62,7 +62,8 @@ public class Db {
 	static String[] recordSpec = new String[] { "NAME", "CLASSNAME", "VERSION",
 			"PARENT", "CHILDREN", "CREATED", "CURRENT", "DELETED", "JSON" };
 
-	static String[] typeSpec = new String[] { "nvarchar(1024)", // NAME
+	static String[] typeSpec = new String[] { 
+			"nvarchar(1024)", // NAME
 			"nvarchar(1024)", // CLASSNAME
 			"long", // VERSION
 			"long", // PARENT
@@ -118,8 +119,9 @@ public class Db {
 							+ typeSpec()
 							+ "PRIMARY KEY (NAME, CLASSNAME, VERSION) )");
 			st.executeUpdate();
-		} catch (Exception e2) {
-			throw new WrapperException(e2);
+		} catch (Exception e) {
+			app.log.error("Error creating APPLICATION table", e);
+			throw new WrapperException(e);
 		}
 	}
 
@@ -130,8 +132,9 @@ public class Db {
 					.prepareStatement("CREATE TABLE IF NOT EXISTS LOGS ("
 							+ typeSpecLogs() + ")");
 			st.executeUpdate();
-		} catch (Exception e2) {
-			throw new WrapperException(e2);
+		} catch (Exception e) {
+			app.log.error("Error creating LOGS table", e);
+			throw new WrapperException(e);
 		}
 	}
 
@@ -147,6 +150,28 @@ public class Db {
 			st = conn.prepareStatement("DELETE FROM LOGS");
 			st.executeUpdate();
 		} catch (Exception e) {
+			app.log.error("Error clearing DB", e);
+			throw new WrapperException(e);
+		}
+	}
+
+	/**
+	 * Cleans up database.
+	 */
+	public void cleanup(int days) {
+		try {
+			String sql = String.format(
+					"DELETE FROM APPLICATION WHERE CREATED < TIMESTAMPADD('DAY', -%d, NOW()) AND (CURRENT = false OR DELETED = true)",
+					days);
+			@Cleanup
+			PreparedStatement st = conn
+					.prepareStatement(sql);
+			st.executeUpdate();
+			sql = String.format("DELETE FROM LOGS WHERE CREATED < TIMESTAMPADD('DAY', -%d, NOW())", days);
+			st = conn.prepareStatement(sql);
+			st.executeUpdate();
+		} catch (Exception e) {
+			app.log.error("Error cleaning DB", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -156,6 +181,8 @@ public class Db {
 	 */
 	synchronized <T extends Base> T newVersion(T obj) {
 		try {
+			app.log.entry(obj);
+
 			// adjust current object
 			long nextNumber = nextNumber(obj); 
 			obj.current = false;
@@ -176,8 +203,9 @@ public class Db {
 			obj.json = Application.toJson(obj);
 
 			newRecord(obj);
-			return obj;
+			return app.log.exit(obj);
 		} catch (Exception e) {
+			app.log.error("Error creating new version", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -220,7 +248,7 @@ public class Db {
 	 */
 	private <T extends Base> boolean anythingChanged(T obj) {
 		@SuppressWarnings("unchecked")
-		Base stored = retrieve(obj.getName(), (Class<? extends T>) obj.getClazz());
+		Base stored = retrieve(obj.getName(), (Class<? extends T>) obj.getClazz(), true);
 		if(stored == null) return true;
 		return !Application.toJson(obj).equals(stored.getJson());
 	}
@@ -234,7 +262,7 @@ public class Db {
 			PreparedStatement st = conn
 					.prepareStatement("INSERT INTO APPLICATION ("
 							+ insertSpec(recordSpec) + ") VALUES ("
-							+ questions(recordSpec) + ")");
+							+ questionMarks(recordSpec) + ")");
 			prepare(st, record);
 			int n = st.executeUpdate();
 			if(n != 1) {
@@ -271,7 +299,7 @@ public class Db {
 	}
 
 	/*
-	 * Adjust current flag in DB.
+	 * Adjust 'current' flag in DB.
 	 */
 	void updateCurrent(Base record) {
 		try {
@@ -298,7 +326,7 @@ public class Db {
 	/**
 	 * Helper functions.
 	 */
-	private static String questions(String[] spec) {
+	private static String questionMarks(String[] spec) {
 		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < spec.length; i++) {
 			sb.append("?");
@@ -352,6 +380,7 @@ public class Db {
 	
 	<T extends Base> T retrieve(String name, Class<? extends T> clazz, boolean noProxy) {
 		try {
+			app.log.entry(name, clazz, noProxy);
 			@Cleanup
 			PreparedStatement st = conn
 					.prepareStatement("SELECT * FROM APPLICATION WHERE NAME = ? AND CLASSNAME = ? AND CURRENT = TRUE AND DELETED = false");
@@ -364,13 +393,15 @@ public class Db {
 				@SuppressWarnings("unchecked")
 				T record = makeBase(name, (Class<? extends T>)Class.forName(className), rs.getString("JSON"));
 				if(noProxy) {
-					return record;
+					return app.log.exit(record);
 				} else {
-					return app.setProxies(record);
+					return app.log.exit(app.setProxies(record));
 				}
 			}
-			return null;
+			app.log.warn("Nothing found!", null);
+			return app.log.exit(null);
 		} catch (Exception e) {
+			app.log.error("Error retrieving object", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -386,6 +417,7 @@ public class Db {
 	 */
 	public <T extends Base> T retrieve(String name, Class<? extends T> clazz, long version, boolean noProxy) {
 		try {
+			app.log.entry(name, clazz, version, noProxy);
 			@Cleanup
 			PreparedStatement st = conn
 					.prepareStatement("SELECT * FROM APPLICATION WHERE NAME = ? AND CLASSNAME = ? AND VERSION = ?");
@@ -399,17 +431,18 @@ public class Db {
 				@SuppressWarnings("unchecked")
 				T record = makeBase(name, (Class<? extends T>)Class.forName(className), rs.getString("JSON"));
 				if(noProxy) {
-					return record;
+					return app.log.exit(record);
 				} else {
-					return app.setProxies(record);
+					return app.log.exit(app.setProxies(record));
 				}
 			}
-			return null;
+			app.log.warn("Nothing found!", null);
+			return app.log.exit(null);
 		} catch (Exception e) {
+			app.log.error("Error retrieving object", e);
 			throw new WrapperException(e);
 		}
 	}
-
 
 	private <T extends Base> T makeBase(String name, Class<? extends T> clazz, String json) {
 		try {
@@ -456,6 +489,7 @@ public class Db {
 	public <T extends Base> List<T> getList(Class<? extends Base> clazz) {
 		List<T> ret = new ArrayList<>();
 		try {
+			app.log.entry(clazz);
 			@Cleanup
 			PreparedStatement st = conn
 					.prepareStatement("SELECT * FROM APPLICATION WHERE CLASSNAME = ? AND CURRENT = TRUE AND DELETED = false ORDER BY NAME");
@@ -467,8 +501,9 @@ public class Db {
 				T record = (T) makeBase(rs.getString("NAME"), clazz, rs.getString("JSON"));
 				ret.add(app.setProxies(record));
 			}
-			return ret;
+			return app.log.exit(ret);
 		} catch (Exception e) {
+			app.log.error("Error getting collection", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -482,6 +517,7 @@ public class Db {
 	public <T extends Base> List<T> getVersions(T base) {
 		List<T> ret = new ArrayList<>();
 		try {
+			app.log.entry(base);
 			@Cleanup
 			PreparedStatement st = conn
 					.prepareStatement("SELECT * FROM APPLICATION WHERE NAME = ? AND CLASSNAME = ? ORDER BY VERSION");
@@ -495,8 +531,9 @@ public class Db {
 				record.current = false;
 				ret.add(record);
 			}
-			return ret;
+			return app.log.exit(ret);
 		} catch (Exception e) {
+			app.log.error("Error getting versions", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -510,6 +547,7 @@ public class Db {
 	 */
 	public List<LogEntry> getLogs(String name, String clazz) {
 		try {
+			app.log.entry(name, clazz);
 			List<LogEntry> logs = new ArrayList<>();
 			@Cleanup
 			PreparedStatement st = conn
@@ -522,8 +560,9 @@ public class Db {
 				LogEntry record = makeLogEntry(rs);
 				logs.add(record);
 			}
-			return logs;
+			return app.log.exit(logs);
 		} catch (Exception e) {
+			app.log.error("Error getting logs", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -535,6 +574,7 @@ public class Db {
 	 */
 	public List<LogEntry> getAllLogs() {
 		try {
+			app.log.entry();
 			List<LogEntry> logs = new ArrayList<>();
 			@Cleanup
 			PreparedStatement st = conn
@@ -545,8 +585,9 @@ public class Db {
 				LogEntry record = makeLogEntry(rs);
 				logs.add(record);
 			}
-			return logs;
+			return app.log.exit(logs);
 		} catch (Exception e) {
+			app.log.error("Error getting logs", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -582,7 +623,7 @@ public class Db {
 			@Cleanup
 			PreparedStatement st = conn.prepareStatement("INSERT INTO LOGS ("
 					+ insertSpec(recordSpecLogs) + ") VALUES ("
-					+ questions(recordSpecLogs) + ")");
+					+ questionMarks(recordSpecLogs) + ")");
 			prepareLogs(st, entry);
 			st.execute();
 		} catch (Exception e) {

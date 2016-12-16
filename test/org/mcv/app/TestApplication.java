@@ -4,26 +4,20 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+
+import lombok.extern.slf4j.Slf4j;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class TestApplication {
 
 	@Before
 	public void setUp() throws Exception {
-		Application app = new Application("app");
-		app.clear();
-		File logdir = new File("applogs");
-		logdir.mkdirs();
-		app.setLogLocation(logdir);
 	}
 
 	@After
@@ -33,9 +27,6 @@ public class TestApplication {
 	private Application mkApp() {
 		Application app = new Application("app");
 		app.clear();
-		File logdir = new File("applogs");
-		logdir.mkdirs();
-		app.setLogLocation(logdir);
 		return app;
 	}
 	
@@ -62,6 +53,9 @@ public class TestApplication {
 			assertTrue(app.getDb() != null);
 			// create and persist
 			Base base = app.create("base", Base.class);
+			for(LogEntry entry : app.log.getLogs()) {
+				System.out.println(entry);
+			}
 			assertTrue(base != null);
 			//System.out.println("created: " + base.toString());
 			// retrieve

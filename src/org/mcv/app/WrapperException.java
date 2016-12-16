@@ -8,6 +8,7 @@ public class WrapperException extends RuntimeException {
 	}
 
 	public static Throwable unwrap(Throwable e) {
+		if(e == null) return new Exception("null");
 		Throwable ret = e;
 		while(ret instanceof WrapperException) {
 			ret = ret.getCause();

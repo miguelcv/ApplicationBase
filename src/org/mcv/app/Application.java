@@ -1,7 +1,6 @@
 package org.mcv.app;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -41,6 +40,7 @@ public class Application {
 	String name;
 	static ObjectMapper mapper;
 	Base log = new Base("log", Base.class);
+	static Base staticLog = new Base("staticLog", Base.class);
 	File logLocation;
 	Kind logLevel = Kind.DEBUG;
 	Properties props = new Properties();
@@ -53,6 +53,8 @@ public class Application {
 	public Application(String name) {
 		this.name = name;
 		log.app = this;
+		if(staticLog.app == null) staticLog.app = this;
+		
 		Thread.currentThread().setUncaughtExceptionHandler(
 				new Thread.UncaughtExceptionHandler() {
 					public void uncaughtException(Thread t, Throwable e) {
@@ -61,10 +63,10 @@ public class Application {
 				});
 		try {
 			@Cleanup
-			InputStream is = new FileInputStream("conf/config.props");
+			InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.props");
 			props.load(is);
 		} catch (Exception e) {
-			log.warn("Could not load conf/config.props", e);
+			log.warn("Could not load config.props", e);
 		}
 
 		if (mapper == null) {
@@ -102,48 +104,50 @@ public class Application {
 	 */
 	@SuppressWarnings("unchecked")
 	<T extends Base> T setProxies(T base) {
-		ProxyAspect forSetters = new ProxyAspect(SetterAdvice.class,
-				new ProxyPointcutSupport() {
-					public boolean apply(MethodInfo methodInfo) {
-						return isPublic(methodInfo)
-								&& matchMethodName(methodInfo, "set*")
-								&& hasOneArgument(methodInfo)
-								&& !hasAnnotation(methodInfo, Ignore.class);
-					}
-				});
-		ProxyAspect forMethods = new ProxyAspect(MethodAdvice.class,
-				new ProxyPointcutSupport() {
-					public boolean apply(MethodInfo methodInfo) {
-						if (hasReturnValue(methodInfo)
-								&& (matchMethodName(methodInfo, "get*") || (matchMethodName(
-										methodInfo, "is*")))
-								&& hasNoArguments(methodInfo)) {
-							// getter
-							return false;
-						}
-
-						if (matchMethodName(methodInfo, "set*")
-								&& hasOneArgument(methodInfo)) {
-							// setter
-							return false;
-						}
-						if (hasAnnotation(methodInfo, Ignore.class)) {
-							return false;
-						}
-						return isPublic(methodInfo);
-					}
-				});
-
-		ProxyProxetta proxetta = ProxyProxetta.withAspects(forSetters,
-				forMethods);
-		proxetta.setVariableClassName(true);
 		try {
+			log.entry(base);
+			ProxyAspect forSetters = new ProxyAspect(SetterAdvice.class,
+					new ProxyPointcutSupport() {
+						public boolean apply(MethodInfo methodInfo) {
+							return isPublic(methodInfo)
+									&& matchMethodName(methodInfo, "set*")
+									&& hasOneArgument(methodInfo)
+									&& !hasAnnotation(methodInfo, Ignore.class);
+						}
+					});
+			ProxyAspect forMethods = new ProxyAspect(MethodAdvice.class,
+					new ProxyPointcutSupport() {
+						public boolean apply(MethodInfo methodInfo) {
+							if (hasReturnValue(methodInfo)
+									&& (matchMethodName(methodInfo, "get*") || (matchMethodName(
+											methodInfo, "is*")))
+									&& hasNoArguments(methodInfo)) {
+								// getter
+								return false;
+							}
+
+							if (matchMethodName(methodInfo, "set*")
+									&& hasOneArgument(methodInfo)) {
+								// setter
+								return false;
+							}
+							if (hasAnnotation(methodInfo, Ignore.class)) {
+								return false;
+							}
+							return isPublic(methodInfo);
+						}
+					});
+
+			ProxyProxetta proxetta = ProxyProxetta.withAspects(forSetters,
+					forMethods);
+			proxetta.setVariableClassName(true);
 			T ret = (T) proxetta.builder(base.getClass()).define()
 					.getConstructor(String.class, Class.class)
 					.newInstance(base.getName(), base.getClass());
 			copy(base, ret);
-			return ret;
+			return log.exit(ret);
 		} catch (Exception e) {
+			log.error("AOP error", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -169,6 +173,7 @@ public class Application {
 	 */
 	public <T extends Base> T create(String name, Class<? extends T> clazz) {
 		try {
+			log.entry(name, clazz);
 			T obj = db.retrieve(name, clazz);
 			if (obj == null) {
 				try {
@@ -183,17 +188,21 @@ public class Application {
 					obj.version = 1;
 					obj.json = toJson(obj);
 					db.newRecord(obj);
-					return setProxies(obj);
+					return log.exit(setProxies(obj));
 				} catch (Exception e) {
 					// unique index violation: object was not retrieved because
 					// deleted!
-					return null;
+					log.error(String.format(
+							"Object %s.%s exists, but has been deleted!",
+							clazz, name), e);
+					return log.exit(null);
 				}
 			} else {
 				// return object retrieved from DB
-				return obj;
+				return log.exit(obj);
 			}
 		} catch (Exception e) {
+			log.error("Exception in create()", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -210,6 +219,7 @@ public class Application {
 				return "null";
 			return mapper.writeValueAsString(obj);
 		} catch (Exception e) {
+			staticLog.warn("Error serializing JSON", e);
 			return String.valueOf(obj);
 		}
 	}
@@ -226,6 +236,7 @@ public class Application {
 			return mapper.readValue(json, new TypeReference<T>() {
 			});
 		} catch (Exception e) {
+			staticLog.warn("Error deserializing JSON", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -240,6 +251,7 @@ public class Application {
 		try {
 			mapper.readerForUpdating(to).readValue(from.getJson());
 		} catch (Exception e) {
+			staticLog.warn("Error cloning JSON", e);
 			throw new WrapperException(e);
 		}
 	}
@@ -252,6 +264,11 @@ public class Application {
 	public <T extends Base> void redo(T base) {
 		Base version = db.retrieve(base.getName(), base.getClazz(), base
 				.getChildren().get(0), false);
+		if (version == null) {
+			base.error("Version " + base.getChildren().get(0) + " not found",
+					null);
+			return;
+		}
 		copy(version, base);
 		base.current = true;
 		db.updateCurrent(base);
@@ -265,6 +282,10 @@ public class Application {
 	public void undo(Base base) {
 		Base version = db.retrieve(base.getName(), base.getClazz(),
 				base.getParent(), false);
+		if (version == null) {
+			base.error("Version " + base.getParent() + " not found", null);
+			return;
+		}
 		copy(version, base);
 		base.current = true;
 		db.updateCurrent(base);
@@ -277,6 +298,10 @@ public class Application {
 	 */
 	public void redo(Base base, long version) {
 		Base ver = db.retrieve(base.getName(), base.getClazz(), version, false);
+		if (ver == null) {
+			base.error("Version " + version + " not found", null);
+			return;
+		}
 		copy(ver, base);
 		base.current = true;
 		db.updateCurrent(base);
@@ -294,7 +319,7 @@ public class Application {
 		db.updateCurrent(base);
 	}
 
-	public boolean writeLog(File file, LogEntry entry) {
+	public static boolean writeLog(File file, LogEntry entry) {
 		try {
 			if (!file.getParentFile().exists()) {
 				file.getParentFile().mkdirs();
@@ -315,7 +340,7 @@ public class Application {
 		}
 	}
 
-	private Object formatObjects(LogEntry entry) {
+	private static Object formatObjects(LogEntry entry) {
 		switch (entry.kind) {
 		case NONE:
 			return "";
@@ -350,7 +375,7 @@ public class Application {
 		return null;
 	}
 
-	private String stack(Object trace) {
+	private static String stack(Object trace) {
 		StringBuilder sb = new StringBuilder();
 		if (trace instanceof String) {
 			List<StackTraceElement> stack = fromJson((String) trace,
