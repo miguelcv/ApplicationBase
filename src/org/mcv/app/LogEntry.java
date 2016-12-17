@@ -1,6 +1,7 @@
 package org.mcv.app;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import lombok.Data;
 
@@ -42,12 +43,12 @@ public class LogEntry {
 	LocalDateTime timestamp;
 	String thread;
 	String method;
+	int methodLine;
+	String methodClass;
 	String caller;
 	int callerLine;
 	String callerClass;
 	Kind kind;
-	Object object1;
-	Object object2;
+	List<Object> objList;
 	String message;
-
 }

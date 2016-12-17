@@ -83,23 +83,29 @@ public class Db {
 		return sb.toString();
 	}
 
-	static String[] recordSpecLogs = new String[] { "NAME", "CLASSNAME", "STAMP", "THREAD",
-			"METHOD", "CALLER", "CALLERLINE", "CALLERCLASS", "KIND", "OBJECT1",
-			"OBJECT2", "MESSAGE" };
+	static String[] recordSpecLogs = new String[] { 
+		"NAME", 
+		"CLASSNAME", 
+		"STAMP", 
+		"THREAD",
+		"METHOD", "METHODLINE", "METHODCLASS",
+		"CALLER", "CALLERLINE", "CALLERCLASS", 
+		"KIND", "OBJLIST", "MESSAGE" };
 
 	static String[] typeSpecLogs = new String[] { 
-			"nvarchar(1024)", // NAME
-			"nvarchar(1024)", // CLASSNAME
-			"timestamp", // TIMESTAMP
-			"nvarchar(256)", // THREAD
-			"nvarchar(256)", // METHOD
-			"nvarchar(256)", // CALLER
-			"integer", // CALLERLINE
-			"nvarchar(256)", // CALLERCLASS
-			"integer", // KIND
-			"clob", // OBJECT!
-			"clob", // OBJECT2
-			"nvarchar(1024)" // MESSAGE
+			"nvarchar(1024)", 	// NAME
+			"nvarchar(1024)", 	// CLASSNAME
+			"timestamp", 		// STAMP
+			"nvarchar(256)", 	// THREAD
+			"nvarchar(256)", 	// METHOD
+			"integer", 			// METHODLINE
+			"nvarchar(256)", 	// METHODCLASS			
+			"nvarchar(256)", 	// CALLER
+			"integer", 			// CALLERLINE
+			"nvarchar(256)", 	// CALLERCLASS
+			"integer", 			// KIND
+			"clob", 			// OBJLIST
+			"nvarchar(1024)" 	// MESSAGE
 	};
 
 	private static String typeSpecLogs() {
@@ -598,13 +604,16 @@ public class Db {
 			log.setCaller(rs.getString("CALLER"));
 			log.setCallerClass(rs.getString("CALLERCLASS"));
 			log.setCallerLine(rs.getInt("CALLERLINE"));
+			
+			log.setMethod(rs.getString("METHOD"));
+			log.setMethodClass(rs.getString("METHODCLASS"));
+			log.setMethodLine(rs.getInt("METHODLINE"));
+			
 			log.setName(rs.getString("NAME"));
 			log.setClazz(rs.getString("CLASSNAME"));
 			log.setKind(LogEntry.Kind.fromInteger(rs.getInt("KIND")));
 			log.setMessage(rs.getString("MESSAGE"));
-			log.setMethod(rs.getString("METHOD"));
-			log.setObject1(rs.getString("OBJECT1"));
-			log.setObject2(rs.getString("OBJECT2"));
+			log.setObjList(Application.fromJson(rs.getString("OBJLIST"), new ArrayList<>()));
 			log.setThread(rs.getString("THREAD"));
 			log.setTimestamp(rs.getTimestamp("STAMP").toLocalDateTime());
 			return log;
@@ -639,12 +648,13 @@ public class Db {
 			st.setTimestamp(i++, Timestamp.valueOf(entry.timestamp));
 			st.setString(i++, entry.thread);
 			st.setString(i++, entry.method);
+			st.setInt(i++, entry.methodLine);
+			st.setString(i++, entry.methodClass);
 			st.setString(i++, entry.caller);
 			st.setInt(i++, entry.callerLine);
 			st.setString(i++, entry.callerClass);
 			st.setInt(i++, entry.kind.ordinal());
-			st.setString(i++, Application.toJson(entry.object1));
-			st.setString(i++, Application.toJson(entry.object2));
+			st.setString(i++, Application.toJson(entry.objList));
 			st.setString(i++, entry.message);
 		} catch (Exception e) {
 			throw new WrapperException(e);

@@ -3,6 +3,7 @@ package org.mcv.app;
 import java.io.File;
 import java.io.InputStream;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -213,7 +214,7 @@ public class Base {
 		return app.getLogs(name, clazz.getCanonicalName());
 	}
 
-	//@Ignore
+	@Ignore
 	void log(LogEntry entry) {
 		if (app != null) {
 			app.storeLogEntry(entry);
@@ -228,6 +229,7 @@ public class Base {
 		}
 	}
 
+	@Ignore
 	private boolean filter(LogEntry entry) {
 		// loglevel = DEBUG, INFO, WARN, ERROR, NONE
 
@@ -251,22 +253,30 @@ public class Base {
 		}
 	}
 
-	//@Ignore
-	void log(Kind kind, String message, Object object1, Object object2) {
-		StackTraceElement caller = Thread.currentThread().getStackTrace()[3];
-		StackTraceElement callee = Thread.currentThread().getStackTrace()[2];
-
+	@Ignore
+	void log(Kind kind, String message, List<Object> objList) {
+		
+		StackTraceElement[] elts = Thread.currentThread().getStackTrace();
+		int[] indices = SteUtils.findCalleeAndCaller(elts);
+		
+		StackTraceElement caller = elts[indices[1]];
+		StackTraceElement callee = elts[indices[0]];
+		
 		LogEntry entry = new LogEntry();
-		entry.setCaller(caller.getMethodName());
-		entry.setCallerClass(caller.getClassName());
+		entry.setCaller(SteUtils.cleanup(caller.getMethodName()));
+		entry.setCallerClass(SteUtils.cleanup(caller.getClassName()));
 		entry.setCallerLine(caller.getLineNumber());
+		
 		entry.setClazz(clazz.getCanonicalName());
+		
+		entry.setMethod(SteUtils.cleanup(callee.getMethodName()));
+		entry.setMethodClass(SteUtils.cleanup(callee.getClassName()));
+		entry.setMethodLine(callee.getLineNumber());
+		
 		entry.setKind(kind);
 		entry.setMessage(message);
-		entry.setMethod(callee.getMethodName());
 		entry.setName(name);
-		entry.setObject1(object1);
-		entry.setObject2(object2);
+		entry.setObjList(objList);
 		entry.setThread(Thread.currentThread().getName());
 		entry.setTimestamp(LocalDateTime.now());
 		log(entry);
@@ -279,7 +289,7 @@ public class Base {
 	 */
 	@Ignore
 	public void debug(String message) {
-		log(Kind.DEBUG, message, null, null);
+		log(Kind.DEBUG, message, Collections.emptyList());
 	}
 
 	/**
@@ -289,7 +299,7 @@ public class Base {
 	 */
 	@Ignore
 	public void info(String message) {
-		log(Kind.INFO, message, null, null);
+		log(Kind.INFO, message, Collections.emptyList());
 	}
 
 	/**
@@ -301,7 +311,8 @@ public class Base {
 	@Ignore
 	public void warn(String message, Throwable t) {
 		Throwable e = WrapperException.unwrap(t);
-		log(Kind.WARN, message, e.toString(), e.getStackTrace());
+		String msg = formatMessage(message, e);
+		log(Kind.WARN, msg, Arrays.asList((Object[])e.getStackTrace()));
 	}
 
 	/**
@@ -313,29 +324,38 @@ public class Base {
 	@Ignore
 	public void error(String message, Throwable t) {
 		Throwable e = WrapperException.unwrap(t);
-		log(Kind.ERROR, message, e.toString(), e.getStackTrace());
+		String msg = formatMessage(message, e);
+		log(Kind.ERROR, msg, Arrays.asList((Object[])e.getStackTrace()));
 	}
 
+	private String formatMessage(String message, Throwable e) {
+		String msg;
+		if(message == null || message.length() == 0) {
+			msg = "exception: " + e.toString();
+		} else {
+			msg = "exception: " + e.toString() + "\r\n\tmessage: " + message;
+		}
+		return msg;
+	}
+	
 	/**
 	 * Log method entry message.
 	 * 
-	 * @param message
-	 * @param t
+	 * @param args
 	 */
 	@Ignore
 	public void entry(Object... args) {
-		log(Kind.ENTRY, "method entry", args, null);
+		log(Kind.ENTRY, "method entry", Arrays.asList(args));
 	}
 
 	/**
 	 * Log method exit message.
 	 * 
-	 * @param message
-	 * @param t
+	 * @param retval
 	 */
 	@Ignore
 	public <T> T exit(T retval) {
-		log(Kind.EXIT, "method exit", retval, null);
+		log(Kind.EXIT, "method exit", Collections.singletonList(retval));
 		return retval;
 	}
 

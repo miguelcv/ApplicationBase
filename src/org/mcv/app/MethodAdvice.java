@@ -1,10 +1,7 @@
 package org.mcv.app;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-
-import org.mcv.app.LogEntry.Kind;
 
 import jodd.proxetta.ProxyAdvice;
 import jodd.proxetta.ProxyTarget;
@@ -25,27 +22,41 @@ public class MethodAdvice implements ProxyAdvice {
 		Base base = (Base)ProxyTarget.target();
 		try {
 			// ENTRY LOG
-			entryLog(base, info);
+			if(check(info)) {
+				List<Object> args = new ArrayList<>();
+				for (int i = 0; i < info.argumentCount; i++) {
+					args.add(info.arguments[i]);
+				}
+				base.entry(args);
+			}
 			// INVOKE
 			Object retval = ProxyTarget.invoke();			
 			// EXIT LOG
-			exitLog(base, info, retval);
+			if(check(info)) {
+				base.exit(retval);
+			}
 			return retval;
 		} catch (Throwable t) {
 			// ERROR LOG
 			Throwable e = WrapperException.unwrap(t);
-			errorLog(base, info, e);
+			base.error("Error in method", e);
 			throw new WrapperException(e);
 		}
 	}
 
+	private boolean check(ProxyTargetInfo info) {
+		// filter out Lombok generated
+		if(info.targetMethodName.equals("toString") || 
+				info.targetMethodName.equals("equals") ||
+				info.targetMethodName.equals("hashCode") ||
+				info.targetMethodName.equals("canEqual"))
+			return false;
+		return true;
+	}
+
+	/*
 	private void errorLog(Base base, ProxyTargetInfo info, Throwable t) {
 		LogEntry log = new LogEntry();
-		/* 0 = Thread.getStackTrace */
-		/* 1 = Proxetta.log$0 */
-		/* 2 = Proxetta.setXXX$0 */
-		/* 3 = Proxetta.setXXX */
-		/* 4 = actual caller */
 		StackTraceElement caller = Thread.currentThread().getStackTrace()[4];
 		log.setCaller(caller.getMethodName());
 		log.setCallerClass(caller.getClassName());
@@ -61,14 +72,9 @@ public class MethodAdvice implements ProxyAdvice {
 		log.setMessage("Method error");
 		base.log(log);
 	}
-
+	
 	private void exitLog(Base base, ProxyTargetInfo info, Object retval) {
 		LogEntry log = new LogEntry();
-		/* 0 = Thread.getStackTrace */
-		/* 1 = Proxetta.log$0 */
-		/* 2 = Proxetta.setXXX$0 */
-		/* 3 = Proxetta.setXXX */
-		/* 4 = actual caller */
 		StackTraceElement caller = Thread.currentThread().getStackTrace()[4];
 		log.setCaller(caller.getMethodName());
 		log.setCallerClass(caller.getClassName());
@@ -87,17 +93,12 @@ public class MethodAdvice implements ProxyAdvice {
 
 	private void entryLog(Base base, ProxyTargetInfo info) {
 		LogEntry log = new LogEntry();
-		/* 0 = Thread.getStackTrace */
-		/* 1 = Proxetta.log$0 */
-		/* 2 = Proxetta.setXXX$0 */
-		/* 3 = Proxetta.setXXX */
-		/* 4 = actual caller */
 		StackTraceElement caller = Thread.currentThread().getStackTrace()[4];
 		log.setCaller(caller.getMethodName());
 		log.setCallerClass(caller.getClassName());
 		log.setCallerLine(caller.getLineNumber());
 		log.setKind(Kind.ENTRY);
-		log.setMethod(info.targetMethodName);
+		log.setMethod(info.targetMethodSignature);
 		List<Object> args = new ArrayList<>();
 		for (int i = 0; i < info.argumentCount; i++) {
 			args.add(info.arguments[i]);
@@ -111,4 +112,5 @@ public class MethodAdvice implements ProxyAdvice {
 		log.setMessage("Method entry");
 		base.log(log);
 	}
+	*/
 }

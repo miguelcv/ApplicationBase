@@ -1,7 +1,7 @@
 h2.url=jdbc:h2:./DB/%s
-app.logLocation=./logs/general.log
+app.logLocation=./logs
 app.logLevel=DEBUG
 #<class>.logLocation=
 #<class>.logLevel=
-org.mcv.app.BaseSub.base9.logLocation=./logs/b9.log
-org.mcv.app.BaseSub.base9.logLevel=INFO
+#org.mcv.app.BaseSub.base9.logLocation=./logs/b9.log
+#org.mcv.app.BaseSub.base9.logLevel=INFO

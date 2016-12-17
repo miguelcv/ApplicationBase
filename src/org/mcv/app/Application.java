@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
@@ -329,13 +328,23 @@ public class Application {
 					true, "utf-8");
 			DateTimeFormatter formatter = DateTimeFormatter
 					.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-			out.printf("%s [%s] %-6s method=%s() caller=%s.%s(%d)%n%s%n", entry
-					.getTimestamp().format(formatter), entry.getThread(), entry
-					.getKind().toString(), entry.getMethod(), entry
-					.getCallerClass(), entry.getCaller(),
-					entry.getCallerLine(), formatObjects(entry));
+			out.printf("%s [%s] %-6s method=%s.%s(%s) caller=%s.%s(%S)%n%s%n", 
+					entry.getTimestamp().format(formatter), 
+					entry.getThread(), 
+					entry.getKind().toString(),
+					entry.getClazz(),
+					entry.getMethod(),
+					entry.getMethodLine() >= 0 ? String.valueOf(entry.getMethodLine()) : "",
+					entry.getCallerClass(), 
+					entry.getCaller(),
+					entry.getCallerLine() >- 0 ? String.valueOf(entry.getCallerLine()) : "", 
+					formatObjects(entry));
 			return true;
 		} catch (Exception e) {
+			System.out.println("Error formatting log: " + e);
+			for(StackTraceElement ste : e.getStackTrace()) {
+				System.out.println("\t"+ste);
+			}
 			return false;
 		}
 	}
@@ -345,49 +354,36 @@ public class Application {
 		case NONE:
 			return "";
 		case SETTER:
-			return "\told value=" + entry.object1 + " new value="
-					+ entry.object2;
+			return "\told value: " + entry.objList.get(0) + "\r\n\tnew value: "
+					+ entry.objList.get(1);
 		case ENTRY:
-			return "\targs=" + entry.object1;
+			return "\targs: " + toJson(entry.objList);
 		case EXIT:
-			return "\treturn value=" + entry.object1;
+			return "\treturns: " + entry.objList.get(0);
 		case WARN:
 		case ERROR:
 			StringBuilder sb = new StringBuilder();
-			if (entry.object1 != null) {
-				sb.append("\texception=").append(entry.object1);
+			if (entry.message != null && entry.message.length() > 0) {
+				sb.append("\t").append(entry.message);
 			}
-			if (entry.message != null) {
-				sb.append("\r\n");
-				sb.append("\tmessage=").append(entry.message);
-			}
-			if (entry.object2 != null) {
-				sb.append("\r\n");
-				sb.append("\tstack=\r\n").append(stack(entry.object2));
+			if (entry.objList != null && entry.objList.size() > 0) {
+				if(sb.length() != 0) sb.append("\r\n");
+				sb.append("\tstack:\r\n").append(stack(entry.objList));
 			}
 			return sb.toString();
 		case DEBUG:
 		case INFO:
-			if (entry.getMessage() != null) {
-				return "\tmessage=" + entry.message;
+			if (entry.getMessage() != null && entry.getMessage().length() > 0) {
+				return "\tmessage: " + entry.message;
 			}
 		}
 		return null;
 	}
 
-	private static String stack(Object trace) {
+	private static String stack(List<Object> trace) {
 		StringBuilder sb = new StringBuilder();
-		if (trace instanceof String) {
-			List<StackTraceElement> stack = fromJson((String) trace,
-					new ArrayList<StackTraceElement>());
-			for (StackTraceElement elt : stack) {
-				sb.append("\t\t").append(elt).append("\r\n");
-			}
-		}
-		if (trace instanceof StackTraceElement[]) {
-			for (StackTraceElement elt : (StackTraceElement[]) trace) {
-				sb.append("\t\t").append(elt).append("\r\n");
-			}
+		for (Object obj : trace) {
+			sb.append("\t\t").append(obj).append("\r\n");
 		}
 		return sb.toString();
 	}

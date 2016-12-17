@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,9 +28,19 @@ public class TestApplication {
 	private Application mkApp() {
 		Application app = new Application("app");
 		app.clear();
+		clearDirectory(new File("./logs"));
 		return app;
 	}
 	
+	private void clearDirectory(File dir) {
+		for(File f : dir.listFiles()) {
+			if(f.isDirectory()) {
+				clearDirectory(f);
+			}
+			f.delete();
+		}
+	}
+
 	/* app should initialize DB */
 	@Test
 	public void testApplicationDB() {
@@ -66,8 +77,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}
 	}
 
@@ -89,8 +98,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}
 	}
 
@@ -120,8 +127,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}
 	}
 
@@ -145,8 +150,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}
 	}
 
@@ -183,8 +186,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}
 	}
 	
@@ -213,8 +214,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}		
 	}
 
@@ -245,8 +244,25 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
+		}		
+	}
+
+	@Test
+	public void testNothingChanged() {
+		Application app = mkApp();
+		try {
+			assertTrue(app.getDb() != null);
+			BaseSub base = app.create("base", BaseSub.class);
+			assertTrue(base.getVersion() == 1);
+			base.setMsg("Changed");
+			assertTrue(base.getVersion() == 2);
+			base.store();
+			// no effect
+			assertTrue(base.getVersion() == 2);
+		} catch(Exception e) {
+			Throwable t = WrapperException.unwrap(e);
+			log.error("{}", t, t);
+			fail(t.toString());
 		}		
 	}
 
@@ -360,9 +376,7 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
-		}		
+		}
 	}
 
 	// app.getVersions
@@ -399,8 +413,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}		
 	}
 	
@@ -428,8 +440,6 @@ public class TestApplication {
 			Throwable t = WrapperException.unwrap(e);
 			log.error("{}", t, t);
 			fail(t.toString());
-		} finally {
-			app.getDb().close();
 		}		
 	}
 	
