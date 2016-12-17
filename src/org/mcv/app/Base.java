@@ -58,7 +58,9 @@ public class Base {
 			
 			info("Log location = " + logLoc);
 			if (!logLocation.exists()) {
-				warn("Location does not exist", null);
+				if(!logLocation.getName().endsWith(".log")) {
+					logLocation.mkdirs();
+				}
 			}
 			info("Log level = " + level);
 		} catch (Exception e) {

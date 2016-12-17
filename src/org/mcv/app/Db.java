@@ -35,7 +35,6 @@ public class Db {
 			Class.forName("org.h2.Driver");
 			String format = app.getProps().getProperty("h2.url", "jdbc:h2:./%s"); 
 			String connString = String.format(format, name);
-			System.out.println("H2: " + connString);
 			Connection conn = DriverManager.getConnection(connString, "", "");
 			return conn;
 		} catch (Exception e) {

@@ -52,8 +52,9 @@ public class Application {
 	public Application(String name) {
 		this.name = name;
 		log.app = this;
-		if(staticLog.app == null) staticLog.app = this;
-		
+		if (staticLog.app == null)
+			staticLog.app = this;
+
 		Thread.currentThread().setUncaughtExceptionHandler(
 				new Thread.UncaughtExceptionHandler() {
 					public void uncaughtException(Thread t, Throwable e) {
@@ -62,7 +63,8 @@ public class Application {
 				});
 		try {
 			@Cleanup
-			InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.props");
+			InputStream is = Thread.currentThread().getContextClassLoader()
+					.getResourceAsStream("config.props");
 			props.load(is);
 		} catch (Exception e) {
 			log.warn("Could not load config.props", e);
@@ -83,15 +85,18 @@ public class Application {
 
 		String logLoc = props.getProperty("app.logLocation");
 		log.info("Log location = " + logLoc);
-		logLocation = new File(logLoc);
-		if (!logLocation.exists()) {
-			log.warn("Location " + logLoc + " does not exist", null);
+		if (logLoc != null) {
+			logLocation = new File(logLoc);
+			if (!logLocation.exists()) {
+				if (!logLocation.getName().endsWith(".log")) {
+					logLocation.mkdirs();
+				}
+			}
+
+			String level = props.getProperty("app.logLevel", "DEBUG");
+			logLevel = Kind.valueOf(level);
+			log.info("Log level = " + level);
 		}
-
-		String level = props.getProperty("app.logLevel", "DEBUG");
-		logLevel = Kind.valueOf(level);
-		log.info("Log level = " + level);
-
 		log.info("Application " + name + " initialized.");
 	}
 
@@ -328,22 +333,24 @@ public class Application {
 					true, "utf-8");
 			DateTimeFormatter formatter = DateTimeFormatter
 					.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-			out.printf("%s [%s] %-6s method=%s.%s(%s) caller=%s.%s(%S)%n%s%n", 
-					entry.getTimestamp().format(formatter), 
-					entry.getThread(), 
+			out.printf(
+					"%s [%s] %-6s method=%s.%s(%s) caller=%s.%s(%S)%n%s%n",
+					entry.getTimestamp().format(formatter),
+					entry.getThread(),
 					entry.getKind().toString(),
 					entry.getClazz(),
 					entry.getMethod(),
-					entry.getMethodLine() >= 0 ? String.valueOf(entry.getMethodLine()) : "",
-					entry.getCallerClass(), 
+					entry.getMethodLine() >= 0 ? String.valueOf(entry
+							.getMethodLine()) : "",
+					entry.getCallerClass(),
 					entry.getCaller(),
-					entry.getCallerLine() >- 0 ? String.valueOf(entry.getCallerLine()) : "", 
-					formatObjects(entry));
+					entry.getCallerLine() > -0 ? String.valueOf(entry
+							.getCallerLine()) : "", formatObjects(entry));
 			return true;
 		} catch (Exception e) {
 			System.out.println("Error formatting log: " + e);
-			for(StackTraceElement ste : e.getStackTrace()) {
-				System.out.println("\t"+ste);
+			for (StackTraceElement ste : e.getStackTrace()) {
+				System.out.println("\t" + ste);
 			}
 			return false;
 		}
@@ -367,7 +374,8 @@ public class Application {
 				sb.append("\t").append(entry.message);
 			}
 			if (entry.objList != null && entry.objList.size() > 0) {
-				if(sb.length() != 0) sb.append("\r\n");
+				if (sb.length() != 0)
+					sb.append("\r\n");
 				sb.append("\tstack:\r\n").append(stack(entry.objList));
 			}
 			return sb.toString();

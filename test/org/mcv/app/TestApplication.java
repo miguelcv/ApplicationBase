@@ -10,29 +10,18 @@ import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.junit.After;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 @Slf4j
 public class TestApplication {
 
-	@Before
-	public void setUp() throws Exception {
+	@BeforeClass
+	public static void setupClass() {
+		clearDirectory(new File("./logs"));		
 	}
 
-	@After
-	public void tearDown() throws Exception {
-	}
-
-	private Application mkApp() {
-		Application app = new Application("app");
-		app.clear();
-		clearDirectory(new File("./logs"));
-		return app;
-	}
-	
-	private void clearDirectory(File dir) {
+	private static void clearDirectory(File dir) {
 		for(File f : dir.listFiles()) {
 			if(f.isDirectory()) {
 				clearDirectory(f);
@@ -41,6 +30,12 @@ public class TestApplication {
 		}
 	}
 
+	private Application mkApp() {
+		Application app = new Application("app");
+		app.clear();
+		return app;
+	}
+	
 	/* app should initialize DB */
 	@Test
 	public void testApplicationDB() {
