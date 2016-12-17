@@ -26,11 +26,11 @@ public class SetterAdvice implements ProxyAdvice {
 		ProxyTargetInfo info = ProxyTarget.info();
 		Base base = (Base) ProxyTarget.target();
 		if(!base.isCurrent()) {
-			base.warn("No changes allowed: object is not current", null);
+			base.warn("No changes allowed: object %s is not current", base.getName());
 			return null;
 		}
 		if(base.isDeleted()) {
-			base.warn("No changes allowed: object is deleted", null);
+			base.warn("No changes allowed: object %s is deleted", base.getName());
 			return null;
 		}
 

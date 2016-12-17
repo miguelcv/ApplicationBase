@@ -6,8 +6,10 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import jodd.proxetta.MethodInfo;
@@ -19,6 +21,7 @@ import lombok.Data;
 import lombok.ToString;
 import lombok.experimental.Delegate;
 
+import org.h2.jdbc.JdbcSQLException;
 import org.mcv.app.LogEntry.Kind;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
@@ -58,7 +61,7 @@ public class Application {
 		Thread.currentThread().setUncaughtExceptionHandler(
 				new Thread.UncaughtExceptionHandler() {
 					public void uncaughtException(Thread t, Throwable e) {
-						log.error("Uncaught exception", e);
+						log.error(e, "Uncaught exception");
 					}
 				});
 		try {
@@ -67,7 +70,7 @@ public class Application {
 					.getResourceAsStream("config.props");
 			props.load(is);
 		} catch (Exception e) {
-			log.warn("Could not load config.props", e);
+			log.warn(e, "Could not load config.props");
 		}
 
 		if (mapper == null) {
@@ -151,7 +154,7 @@ public class Application {
 			copy(base, ret);
 			return log.exit(ret);
 		} catch (Exception e) {
-			log.error("AOP error", e);
+			log.error(e, "AOP error");
 			throw new WrapperException(e);
 		}
 	}
@@ -193,20 +196,23 @@ public class Application {
 					obj.json = toJson(obj);
 					db.newRecord(obj);
 					return log.exit(setProxies(obj));
-				} catch (Exception e) {
-					// unique index violation: object was not retrieved because
-					// deleted!
-					log.error(String.format(
-							"Object %s.%s exists, but has been deleted!",
-							clazz, name), e);
-					return log.exit(null);
+				} catch(Exception e) {
+					Throwable t = WrapperException.unwrap(e);
+					if(t instanceof JdbcSQLException && t.getMessage().contains("Unique index or primary key violation")) {
+						// object was not retrieved because deleted!
+						log.error(t, "Object %s.%s exists, but has been deleted", clazz.getCanonicalName(), name);
+						return log.exit(null);
+					} else {
+						log.error(t, "Unexpected error creating object %s.%s", 	clazz.getCanonicalName(), name);
+						return log.exit(null);
+					}
 				}
 			} else {
 				// return object retrieved from DB
 				return log.exit(obj);
 			}
 		} catch (Exception e) {
-			log.error("Exception in create()", e);
+			log.error(e, "Unexpected error creating object %s.%s", 	clazz.getCanonicalName(), name);
 			throw new WrapperException(e);
 		}
 	}
@@ -223,7 +229,7 @@ public class Application {
 				return "null";
 			return mapper.writeValueAsString(obj);
 		} catch (Exception e) {
-			staticLog.warn("Error serializing JSON", e);
+			staticLog.warn(e, "Error serializing %s to JSON", String.valueOf(obj));
 			return String.valueOf(obj);
 		}
 	}
@@ -240,7 +246,7 @@ public class Application {
 			return mapper.readValue(json, new TypeReference<T>() {
 			});
 		} catch (Exception e) {
-			staticLog.warn("Error deserializing JSON", e);
+			staticLog.warn(e, "Error deserializing JSON: %s", json);
 			throw new WrapperException(e);
 		}
 	}
@@ -255,7 +261,7 @@ public class Application {
 		try {
 			mapper.readerForUpdating(to).readValue(from.getJson());
 		} catch (Exception e) {
-			staticLog.warn("Error cloning JSON", e);
+			staticLog.warn(e, "Error cloning JSON: %s", from != null ? from.getJson() : "null");
 			throw new WrapperException(e);
 		}
 	}
@@ -269,9 +275,7 @@ public class Application {
 		Base version = db.retrieve(base.getName(), base.getClazz(), base
 				.getChildren().get(0), false);
 		if (version == null) {
-			base.error("Version " + base.getChildren().get(0) + " not found",
-					null);
-			return;
+			base.error("Version %d not found",  base.getChildren().get(0));
 		}
 		copy(version, base);
 		base.current = true;
@@ -287,7 +291,7 @@ public class Application {
 		Base version = db.retrieve(base.getName(), base.getClazz(),
 				base.getParent(), false);
 		if (version == null) {
-			base.error("Version " + base.getParent() + " not found", null);
+			base.error("Version %d not found", base.getParent());
 			return;
 		}
 		copy(version, base);
@@ -303,7 +307,7 @@ public class Application {
 	public void redo(Base base, long version) {
 		Base ver = db.retrieve(base.getName(), base.getClazz(), version, false);
 		if (ver == null) {
-			base.error("Version " + version + " not found", null);
+			base.error("Version %d not found", version);
 			return;
 		}
 		copy(ver, base);
@@ -334,7 +338,7 @@ public class Application {
 			DateTimeFormatter formatter = DateTimeFormatter
 					.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 			out.printf(
-					"%s [%s] %-6s method=%s.%s(%s) caller=%s.%s(%S)%n%s%n",
+					"%s [%s] %-6s method: %s.%s(%s) caller: %s.%s(%s)%n%s%n",
 					entry.getTimestamp().format(formatter),
 					entry.getThread(),
 					entry.getKind().toString(),
@@ -391,7 +395,16 @@ public class Application {
 	private static String stack(List<Object> trace) {
 		StringBuilder sb = new StringBuilder();
 		for (Object obj : trace) {
-			sb.append("\t\t").append(obj).append("\r\n");
+			if(obj instanceof StackTraceElement) {
+				sb.append("\t\t").append(obj).append("\r\n");
+			} else if(obj instanceof LinkedHashMap) {
+				@SuppressWarnings("unchecked")
+				Map<String, Object> map = (Map<String, Object>) obj;
+				StackTraceElement ste = new StackTraceElement((String)map.get("declaringClass"), (String)map.get("methodName"), (String)map.get("fileName"), (Integer)map.get("lineNumber"));
+				sb.append("\t\t").append(ste).append("\r\n");
+			} else {
+				System.out.println("Funny object :" + obj + " of type " + obj.getClass());
+			}
 		}
 		return sb.toString();
 	}

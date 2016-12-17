@@ -198,8 +198,8 @@ public class TestApplication {
 			base.toString();
 			base.debug("This is a debug message");
 			base.info("This is an info message");
-			base.warn("This is a warning message", new Exception("Oops"));
-			base.error("This is an error message", new Exception("Really bad"));
+			base.warn(new Exception("Oops"), "This is a warning message");
+			base.error(new Exception("Really bad"), "This is an error message");
 			assertTrue(base.getVersion() == 5);
 			List<LogEntry> logs = base.getLogs();
 			for(LogEntry log : logs) {
@@ -228,8 +228,8 @@ public class TestApplication {
 			base.toString();
 			base.debug("This is a debug message");
 			base.info("This is an info message");
-			base.warn("This is a warning message", new Exception("Oops"));
-			base.error("This is an error message", new Exception("Really bad"));
+			base.warn(new Exception("Oops"), "This is a warning message");
+			base.error(new Exception("Really bad"), "This is an error message");
 			assertTrue(base.getVersion() == 2);
 			List<LogEntry> logs = base.getLogs();
 			for(LogEntry log : logs) {

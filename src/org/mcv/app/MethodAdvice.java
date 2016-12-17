@@ -38,9 +38,8 @@ public class MethodAdvice implements ProxyAdvice {
 			return retval;
 		} catch (Throwable t) {
 			// ERROR LOG
-			Throwable e = WrapperException.unwrap(t);
-			base.error("Error in method", e);
-			throw new WrapperException(e);
+			base.error(t, "Error in method %s", info.targetMethodName);
+			throw new WrapperException(t);
 		}
 	}
 

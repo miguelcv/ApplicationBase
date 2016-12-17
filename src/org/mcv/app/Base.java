@@ -23,7 +23,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  *
  */
 @Getter
-@ToString
+@ToString(exclude={"logLocation", "logLevel"})
 @EqualsAndHashCode
 public class Base {
 
@@ -290,8 +290,8 @@ public class Base {
 	 * @param message
 	 */
 	@Ignore
-	public void debug(String message) {
-		log(Kind.DEBUG, message, Collections.emptyList());
+	public void debug(String message, Object... args) {
+		log(Kind.DEBUG, String.format(message, args), Collections.emptyList());
 	}
 
 	/**
@@ -300,8 +300,8 @@ public class Base {
 	 * @param message
 	 */
 	@Ignore
-	public void info(String message) {
-		log(Kind.INFO, message, Collections.emptyList());
+	public void info(String message, Object... args) {
+		log(Kind.INFO, String.format(message, args), Collections.emptyList());
 	}
 
 	/**
@@ -311,10 +311,16 @@ public class Base {
 	 * @param t
 	 */
 	@Ignore
-	public void warn(String message, Throwable t) {
+	public void warn(Throwable t, String message, Object... args) {
 		Throwable e = WrapperException.unwrap(t);
-		String msg = formatMessage(message, e);
+		String msg = formatMessage(String.format(message, args), e);
 		log(Kind.WARN, msg, Arrays.asList((Object[])e.getStackTrace()));
+	}
+
+	@Ignore
+	public void warn(String message, Object... args) {
+		String msg = formatMessage(String.format(message, args), null);
+		log(Kind.WARN, msg, Collections.emptyList());
 	}
 
 	/**
@@ -324,15 +330,24 @@ public class Base {
 	 * @param t
 	 */
 	@Ignore
-	public void error(String message, Throwable t) {
+	public void error(Throwable t, String message, Object... args) {
 		Throwable e = WrapperException.unwrap(t);
-		String msg = formatMessage(message, e);
+		String msg = formatMessage(String.format(message, args), e);
 		log(Kind.ERROR, msg, Arrays.asList((Object[])e.getStackTrace()));
 	}
 
+	@Ignore
+	public void error(String message, Object... args) {
+		String msg = formatMessage(String.format(message, args), null);
+		log(Kind.ERROR, msg, Collections.emptyList());
+	}
+
+	@Ignore
 	private String formatMessage(String message, Throwable e) {
 		String msg;
-		if(message == null || message.length() == 0) {
+		if(e == null) {
+			msg = "message: " + message;
+		} else if(message == null || message.length() == 0) {
 			msg = "exception: " + e.toString();
 		} else {
 			msg = "exception: " + e.toString() + "\r\n\tmessage: " + message;

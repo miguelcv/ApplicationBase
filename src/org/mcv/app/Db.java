@@ -31,14 +31,15 @@ public class Db {
 	}
 
 	private Connection getConnection(String name) {
+		String connString = "";
 		try {
 			Class.forName("org.h2.Driver");
 			String format = app.getProps().getProperty("h2.url", "jdbc:h2:./%s"); 
-			String connString = String.format(format, name);
+			connString = String.format(format, name);
 			Connection conn = DriverManager.getConnection(connString, "", "");
 			return conn;
 		} catch (Exception e) {
-			app.log.error("Error connecting to DB", e);
+			app.log.error(e, "Error connecting to DB: %s", connString);
 			throw new WrapperException(e);
 		}
 	}
@@ -50,7 +51,7 @@ public class Db {
 		try {
 			conn.close();
 		} catch (Exception e) {
-			app.log.error("Error disconnecting from DB", e);
+			app.log.error(e, "Error disconnecting from DB");
 			throw new WrapperException(e);
 		}
 	}
@@ -125,7 +126,7 @@ public class Db {
 							+ "PRIMARY KEY (NAME, CLASSNAME, VERSION) )");
 			st.executeUpdate();
 		} catch (Exception e) {
-			app.log.error("Error creating APPLICATION table", e);
+			app.log.error(e, "Error creating APPLICATION table");
 			throw new WrapperException(e);
 		}
 	}
@@ -138,7 +139,7 @@ public class Db {
 							+ typeSpecLogs() + ")");
 			st.executeUpdate();
 		} catch (Exception e) {
-			app.log.error("Error creating LOGS table", e);
+			app.log.error(e, "Error creating LOGS table");
 			throw new WrapperException(e);
 		}
 	}
@@ -155,7 +156,7 @@ public class Db {
 			st = conn.prepareStatement("DELETE FROM LOGS");
 			st.executeUpdate();
 		} catch (Exception e) {
-			app.log.error("Error clearing DB", e);
+			app.log.error(e, "Error clearing DB");
 			throw new WrapperException(e);
 		}
 	}
@@ -176,7 +177,7 @@ public class Db {
 			st = conn.prepareStatement(sql);
 			st.executeUpdate();
 		} catch (Exception e) {
-			app.log.error("Error cleaning DB", e);
+			app.log.error(e, "Error cleaning DB");
 			throw new WrapperException(e);
 		}
 	}
@@ -210,7 +211,7 @@ public class Db {
 			newRecord(obj);
 			return app.log.exit(obj);
 		} catch (Exception e) {
-			app.log.error("Error creating new version", e);
+			app.log.error(e, "Error creating new version for object %s", obj.getName());
 			throw new WrapperException(e);
 		}
 	}
@@ -403,10 +404,10 @@ public class Db {
 					return app.log.exit(app.setProxies(record));
 				}
 			}
-			app.log.warn("Nothing found!", null);
+			app.log.warn("Object %s not found!", name);
 			return app.log.exit(null);
 		} catch (Exception e) {
-			app.log.error("Error retrieving object", e);
+			app.log.error(e, "Error retrieving object %s", name);
 			throw new WrapperException(e);
 		}
 	}
@@ -441,10 +442,10 @@ public class Db {
 					return app.log.exit(app.setProxies(record));
 				}
 			}
-			app.log.warn("Nothing found!", null);
+			app.log.warn("Object %s not found!", name);
 			return app.log.exit(null);
 		} catch (Exception e) {
-			app.log.error("Error retrieving object", e);
+			app.log.error(e, "Error retrieving object %s", name);
 			throw new WrapperException(e);
 		}
 	}
@@ -508,7 +509,7 @@ public class Db {
 			}
 			return app.log.exit(ret);
 		} catch (Exception e) {
-			app.log.error("Error getting collection", e);
+			app.log.error(e, "Error getting collection %s", clazz.getCanonicalName());
 			throw new WrapperException(e);
 		}
 	}
@@ -538,7 +539,7 @@ public class Db {
 			}
 			return app.log.exit(ret);
 		} catch (Exception e) {
-			app.log.error("Error getting versions", e);
+			app.log.error(e, "Error getting versions for object %s", base.getName());
 			throw new WrapperException(e);
 		}
 	}
@@ -567,7 +568,7 @@ public class Db {
 			}
 			return app.log.exit(logs);
 		} catch (Exception e) {
-			app.log.error("Error getting logs", e);
+			app.log.error(e, "Error getting logs for object %s", name);
 			throw new WrapperException(e);
 		}
 	}
@@ -592,7 +593,7 @@ public class Db {
 			}
 			return app.log.exit(logs);
 		} catch (Exception e) {
-			app.log.error("Error getting logs", e);
+			app.log.error(e, "Error getting all logs");
 			throw new WrapperException(e);
 		}
 	}
