@@ -438,5 +438,19 @@ public class TestApplication {
 		}		
 	}
 	
+	@Test
+	public void testAutoDeclare() {
+		Application app = mkApp();
+		try {
+			assertTrue(app.getDb() != null);
+			BaseSub base = app.create();
+			assertEquals("base", base.getName());
+			assertEquals(BaseSub.class, base.getClazz());
+		} catch(Exception e) {
+			Throwable t = WrapperException.unwrap(e);
+			log.error("{}", t, t);
+			fail(t.toString());
+		}		
+	}
 
 }

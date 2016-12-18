@@ -4,8 +4,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -27,11 +29,15 @@ import org.mcv.app.LogEntry.Kind;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * @author Miguelc
  *
+ * The Application class takes care of creating self-logging, self-persisting Base objects.
+ * It also provides some JSON serialization and deserialization utilities.
+ * 
  */
 @Data
 @ToString(exclude = { "db", "props", "log", "logLocation", "logLevel" })
@@ -39,18 +45,23 @@ public class Application {
 
 	@Delegate
 	Db db;
+	
 	String name;
+	
 	static ObjectMapper mapper;
+	
 	Base log = new Base("log", Base.class);
 	static Base staticLog = new Base("staticLog", Base.class);
 	File logLocation;
-	Kind logLevel = Kind.DEBUG;
+	LogEntry.Kind logLevel = Kind.DEBUG;
+	static boolean logToConsole;
+	
 	Properties props = new Properties();
 
 	/**
 	 * Constructor.
 	 * 
-	 * @param name
+	 * @param name	Application name.
 	 */
 	public Application(String name) {
 		this.name = name;
@@ -58,12 +69,12 @@ public class Application {
 		if (staticLog.app == null)
 			staticLog.app = this;
 
-		Thread.currentThread().setUncaughtExceptionHandler(
-				new Thread.UncaughtExceptionHandler() {
-					public void uncaughtException(Thread t, Throwable e) {
-						log.error(e, "Uncaught exception");
-					}
-				});
+		Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+			public void uncaughtException(Thread t, Throwable e) {
+				log.error(e, "Uncaught exception");
+			}
+		});
+
 		try {
 			@Cleanup
 			InputStream is = Thread.currentThread().getContextClassLoader()
@@ -76,6 +87,7 @@ public class Application {
 		if (mapper == null) {
 			mapper = new ObjectMapper();
 			mapper.findAndRegisterModules();
+			mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 			mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
 			mapper.setVisibility(PropertyAccessor.GETTER, Visibility.NONE);
 			mapper.setVisibility(PropertyAccessor.IS_GETTER, Visibility.NONE);
@@ -100,14 +112,17 @@ public class Application {
 			logLevel = Kind.valueOf(level);
 			log.info("Log level = " + level);
 		}
+		
+		logToConsole = props.getProperty("app.logToConsole", "true").equals("true");
+		
 		log.info("Application " + name + " initialized.");
 	}
 
 	/**
-	 * Set the Setter and Method proxies.
+	 * Sets the Setter and Method proxies on the Base object.
 	 * 
-	 * @param base
-	 * @return proxied object
+	 * @param base	Base object
+	 * @return Proxied Base object
 	 */
 	@SuppressWarnings("unchecked")
 	<T extends Base> T setProxies(T base) {
@@ -171,39 +186,99 @@ public class Application {
 		jsonClone(from, to);
 	}
 
+	@SuppressWarnings("unchecked")
+	public <T extends Base> T create() {
+		Resolver solver = new Resolver();
+		String name = solver.resolvedName;
+		Class<? extends Base> clazz = (Class<? extends Base>) solver.resolvedClass;
+		return (T) create(name, clazz);
+	}
+
+	Constructor<?> getConstructor(String name, Class<?> clazz, Object[] params) {
+		Constructor<?>[] ctors = clazz.getConstructors();
+		Class<?>[] paramTypes = new Class<?>[params.length + 2];
+		paramTypes[0] = String.class;
+		paramTypes[1] = Class.class;
+		for (int i = 0; i < params.length; i++) {
+			paramTypes[i + 2] = params[i].getClass();
+		}
+		for (Constructor<?> ctor : ctors) {
+			Class<?>[] classes = ctor.getParameterTypes();
+			if(classes.length != paramTypes.length) continue;
+			boolean mismatch = false;
+			for (int i = 0; i < classes.length; i++) {
+				if (!classes[i].equals(paramTypes[i])) {
+					mismatch = true;
+					break;
+				}
+			}
+			if (!mismatch) {
+				return ctor;
+			}
+		}
+		return null;
+	}
+	
+	Object[] getConstructorParams(String name, Class<?> clazz, Object[] params) {
+		Object[] ctorParams = new Object[params.length + 2];
+		ctorParams[0] = name;
+		ctorParams[1] = clazz;
+		for (int i = 0; i < params.length; i++) {
+			ctorParams[i + 2] = params[i];
+		}
+		return ctorParams;
+	}
+	
 	/**
 	 * Create a NEW base object.
 	 * 
-	 * @param name
-	 * @param clazz
-	 * @return new object
+	 * @param name		Object's name
+	 * @param clazz		Object's class
+	 * @param params	Any additional arguments for the constructor
+	 * @return New object	
 	 */
-	public <T extends Base> T create(String name, Class<? extends T> clazz) {
+	@SuppressWarnings("unchecked")
+	public <T extends Base> T create(String name, Class<? extends T> clazz,
+			Object... params) {
 		try {
 			log.entry(name, clazz);
-			T obj = db.retrieve(name, clazz);
+
+			T obj = db.retrieve(name, clazz, params);
 			if (obj == null) {
 				try {
-					obj = clazz.getConstructor(String.class, Class.class)
-							.newInstance(name, clazz);
-					obj.app = this;
-					obj.children = new LinkedList<Long>();
-					obj.created = LocalDateTime.now();
-					obj.current = true;
-					obj.deleted = false;
-					obj.parent = 0;
-					obj.version = 1;
-					obj.json = toJson(obj);
-					db.newRecord(obj);
-					return log.exit(setProxies(obj));
-				} catch(Exception e) {
+					Constructor<?> constructor = getConstructor(name, clazz, params);
+					if(constructor != null) {
+						Object[] ctorParams = getConstructorParams(name, clazz, params);
+						
+						obj = (T) constructor.newInstance((Object[])ctorParams);
+						obj.app = this;
+						obj.children = new LinkedList<Long>();
+						obj.created = LocalDateTime.now();
+						obj.current = true;
+						obj.deleted = false;
+						obj.parent = 0;
+						obj.version = 1;
+						obj.json = toJson(obj);
+						db.newRecord(obj);
+						return log.exit(setProxies(obj));
+					} else {
+						log.error("No suitable constructor found for types %s",
+								Arrays.deepToString(params));
+						return log.exit(null);						
+					}
+				} catch (Exception e) {
 					Throwable t = WrapperException.unwrap(e);
-					if(t instanceof JdbcSQLException && t.getMessage().contains("Unique index or primary key violation")) {
+					if (t instanceof JdbcSQLException
+							&& t.getMessage().contains(
+									"Unique index or primary key violation")) {
 						// object was not retrieved because deleted!
-						log.error(t, "Object %s.%s exists, but has been deleted", clazz.getCanonicalName(), name);
+						log.error(t,
+								"Object %s.%s exists, but has been deleted",
+								clazz.getCanonicalName(), name);
 						return log.exit(null);
 					} else {
-						log.error(t, "Unexpected error creating object %s.%s", 	clazz.getCanonicalName(), name);
+						log.error(t, "Unexpected error creating object %s.%s",
+								clazz.getCanonicalName(), name);
 						return log.exit(null);
 					}
 				}
@@ -212,15 +287,16 @@ public class Application {
 				return log.exit(obj);
 			}
 		} catch (Exception e) {
-			log.error(e, "Unexpected error creating object %s.%s", 	clazz.getCanonicalName(), name);
+			log.error(e, "Unexpected error creating object %s.%s",
+					clazz.getCanonicalName(), name);
 			throw new WrapperException(e);
 		}
 	}
 
 	/**
-	 * Serialize an object.
+	 * Serializes an object.
 	 * 
-	 * @param obj
+	 * @param obj	An object
 	 * @return JSON string
 	 */
 	public static String toJson(Object obj) {
@@ -229,17 +305,18 @@ public class Application {
 				return "null";
 			return mapper.writeValueAsString(obj);
 		} catch (Exception e) {
-			staticLog.warn(e, "Error serializing %s to JSON", String.valueOf(obj));
+			staticLog.warn(e, "Error serializing %s to JSON",
+					String.valueOf(obj));
 			return String.valueOf(obj);
 		}
 	}
 
 	/**
-	 * Deserialize an object.
+	 * Deserializes an object.
 	 * 
-	 * @param json
-	 * @param obj
-	 * @return the object
+	 * @param json	JSON string
+	 * @param obj	Template object
+	 * @return The deserialized object
 	 */
 	public static <T> T fromJson(String json, T obj) {
 		try {
@@ -252,16 +329,17 @@ public class Application {
 	}
 
 	/**
-	 * Deserialize an object into an existing object.
+	 * Deserializes an object's JSON into an existing object.
 	 * 
-	 * @param from
-	 * @param to
+	 * @param from	Source object
+	 * @param to	Destination object
 	 */
 	public static <T extends Base> void jsonClone(T from, T to) {
 		try {
 			mapper.readerForUpdating(to).readValue(from.getJson());
 		} catch (Exception e) {
-			staticLog.warn(e, "Error cloning JSON: %s", from != null ? from.getJson() : "null");
+			staticLog.warn(e, "Error cloning JSON: %s",
+					from != null ? from.getJson() : "null");
 			throw new WrapperException(e);
 		}
 	}
@@ -269,13 +347,13 @@ public class Application {
 	/**
 	 * Redo.
 	 * 
-	 * @param base
+	 * @param base	Object to redo
 	 */
 	public <T extends Base> void redo(T base) {
 		Base version = db.retrieve(base.getName(), base.getClazz(), base
 				.getChildren().get(0), false);
 		if (version == null) {
-			base.error("Version %d not found",  base.getChildren().get(0));
+			base.error("Version %d not found", base.getChildren().get(0));
 		}
 		copy(version, base);
 		base.current = true;
@@ -285,7 +363,7 @@ public class Application {
 	/**
 	 * Undo.
 	 * 
-	 * @param base
+	 * @param base	Object to undo
 	 */
 	public void undo(Base base) {
 		Base version = db.retrieve(base.getName(), base.getClazz(),
@@ -300,9 +378,9 @@ public class Application {
 	}
 
 	/**
-	 * Redo to specific version.
+	 * Redo to specific version in the version tree.
 	 * 
-	 * @param base
+	 * @param base	Object to redo
 	 */
 	public void redo(Base base, long version) {
 		Base ver = db.retrieve(base.getName(), base.getClazz(), version, false);
@@ -318,8 +396,8 @@ public class Application {
 	/**
 	 * Make any version the current one.
 	 * 
-	 * @param base
-	 * @param version
+	 * @param base	The current object
+	 * @param version	The version to copy into the current object
 	 */
 	public <T extends Base> void select(T base, T version) {
 		copy(version, base);
@@ -327,6 +405,13 @@ public class Application {
 		db.updateCurrent(base);
 	}
 
+	/**
+	 * Writes a log entry to a file.
+	 * 
+	 * @param file	output file
+	 * @param entry	log entry
+	 * @return	success
+	 */
 	public static boolean writeLog(File file, LogEntry entry) {
 		try {
 			if (!file.getParentFile().exists()) {
@@ -348,8 +433,22 @@ public class Application {
 							.getMethodLine()) : "",
 					entry.getCallerClass(),
 					entry.getCaller(),
-					entry.getCallerLine() > -0 ? String.valueOf(entry
-							.getCallerLine()) : "", formatObjects(entry));
+					entry.getCallerLine() > -0 ? String.valueOf(entry.getCallerLine()) : "", formatObjects(entry));
+			
+			if(logToConsole) {
+				System.out.printf(
+						"%s [%s] %-6s method: %s.%s(%s) caller: %s.%s(%s)%n%s%n",
+						entry.getTimestamp().format(formatter),
+						entry.getThread(),
+						entry.getKind().toString(),
+						entry.getClazz(),
+						entry.getMethod(),
+						entry.getMethodLine() >= 0 ? String.valueOf(entry.getMethodLine()) : "",	
+						entry.getCallerClass(),
+						entry.getCaller(),
+						entry.getCallerLine() > -0 ? String.valueOf(entry.getCallerLine()) : "",
+						formatObjects(entry));
+			}
 			return true;
 		} catch (Exception e) {
 			System.out.println("Error formatting log: " + e);
@@ -395,15 +494,20 @@ public class Application {
 	private static String stack(List<Object> trace) {
 		StringBuilder sb = new StringBuilder();
 		for (Object obj : trace) {
-			if(obj instanceof StackTraceElement) {
+			if (obj instanceof StackTraceElement) {
 				sb.append("\t\t").append(obj).append("\r\n");
-			} else if(obj instanceof LinkedHashMap) {
+			} else if (obj instanceof LinkedHashMap) {
 				@SuppressWarnings("unchecked")
 				Map<String, Object> map = (Map<String, Object>) obj;
-				StackTraceElement ste = new StackTraceElement((String)map.get("declaringClass"), (String)map.get("methodName"), (String)map.get("fileName"), (Integer)map.get("lineNumber"));
+				StackTraceElement ste = new StackTraceElement(
+						(String) map.get("declaringClass"),
+						(String) map.get("methodName"),
+						(String) map.get("fileName"),
+						(Integer) map.get("lineNumber"));
 				sb.append("\t\t").append(ste).append("\r\n");
 			} else {
-				System.out.println("Funny object :" + obj + " of type " + obj.getClass());
+				System.out.println("Funny object :" + obj + " of type "
+						+ obj.getClass());
 			}
 		}
 		return sb.toString();

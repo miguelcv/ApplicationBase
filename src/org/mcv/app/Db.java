@@ -1,5 +1,6 @@
 package org.mcv.app;
 
+import java.lang.reflect.Constructor;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -7,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -34,7 +36,8 @@ public class Db {
 		String connString = "";
 		try {
 			Class.forName("org.h2.Driver");
-			String format = app.getProps().getProperty("h2.url", "jdbc:h2:./%s"); 
+			String format = app.getProps()
+					.getProperty("h2.url", "jdbc:h2:./%s");
 			connString = String.format(format, name);
 			Connection conn = DriverManager.getConnection(connString, "", "");
 			return conn;
@@ -62,8 +65,7 @@ public class Db {
 	static String[] recordSpec = new String[] { "NAME", "CLASSNAME", "VERSION",
 			"PARENT", "CHILDREN", "CREATED", "CURRENT", "DELETED", "JSON" };
 
-	static String[] typeSpec = new String[] { 
-			"nvarchar(1024)", // NAME
+	static String[] typeSpec = new String[] { "nvarchar(1024)", // NAME
 			"nvarchar(1024)", // CLASSNAME
 			"long", // VERSION
 			"long", // PARENT
@@ -83,29 +85,23 @@ public class Db {
 		return sb.toString();
 	}
 
-	static String[] recordSpecLogs = new String[] { 
-		"NAME", 
-		"CLASSNAME", 
-		"STAMP", 
-		"THREAD",
-		"METHOD", "METHODLINE", "METHODCLASS",
-		"CALLER", "CALLERLINE", "CALLERCLASS", 
-		"KIND", "OBJLIST", "MESSAGE" };
+	static String[] recordSpecLogs = new String[] { "NAME", "CLASSNAME",
+			"STAMP", "THREAD", "METHOD", "METHODLINE", "METHODCLASS", "CALLER",
+			"CALLERLINE", "CALLERCLASS", "KIND", "OBJLIST", "MESSAGE" };
 
-	static String[] typeSpecLogs = new String[] { 
-			"nvarchar(1024)", 	// NAME
-			"nvarchar(1024)", 	// CLASSNAME
-			"timestamp", 		// STAMP
-			"nvarchar(256)", 	// THREAD
-			"nvarchar(256)", 	// METHOD
-			"integer", 			// METHODLINE
-			"nvarchar(256)", 	// METHODCLASS			
-			"nvarchar(256)", 	// CALLER
-			"integer", 			// CALLERLINE
-			"nvarchar(256)", 	// CALLERCLASS
-			"integer", 			// KIND
-			"clob", 			// OBJLIST
-			"nvarchar(1024)" 	// MESSAGE
+	static String[] typeSpecLogs = new String[] { "nvarchar(1024)", // NAME
+			"nvarchar(1024)", // CLASSNAME
+			"timestamp", // STAMP
+			"nvarchar(256)", // THREAD
+			"nvarchar(256)", // METHOD
+			"integer", // METHODLINE
+			"nvarchar(256)", // METHODCLASS
+			"nvarchar(256)", // CALLER
+			"integer", // CALLERLINE
+			"nvarchar(256)", // CALLERCLASS
+			"integer", // KIND
+			"clob", // OBJLIST
+			"nvarchar(1024)" // MESSAGE
 	};
 
 	private static String typeSpecLogs() {
@@ -166,14 +162,15 @@ public class Db {
 	 */
 	public void cleanup(int days) {
 		try {
-			String sql = String.format(
-					"DELETE FROM APPLICATION WHERE CREATED < TIMESTAMPADD('DAY', -%d, NOW()) AND (CURRENT = false OR DELETED = true)",
-					days);
+			String sql = String
+					.format("DELETE FROM APPLICATION WHERE CREATED < TIMESTAMPADD('DAY', -%d, NOW()) AND (CURRENT = false OR DELETED = true)",
+							days);
 			@Cleanup
-			PreparedStatement st = conn
-					.prepareStatement(sql);
+			PreparedStatement st = conn.prepareStatement(sql);
 			st.executeUpdate();
-			sql = String.format("DELETE FROM LOGS WHERE CREATED < TIMESTAMPADD('DAY', -%d, NOW())", days);
+			sql = String
+					.format("DELETE FROM LOGS WHERE CREATED < TIMESTAMPADD('DAY', -%d, NOW())",
+							days);
 			st = conn.prepareStatement(sql);
 			st.executeUpdate();
 		} catch (Exception e) {
@@ -190,15 +187,16 @@ public class Db {
 			app.log.entry(obj);
 
 			// adjust current object
-			long nextNumber = nextNumber(obj); 
+			long nextNumber = nextNumber(obj);
 			obj.current = false;
 			obj.children.add(nextNumber);
-			Map<String, Object> map = Application.fromJson(obj.getJson(), new HashMap<String, Object>()); 
+			Map<String, Object> map = Application.fromJson(obj.getJson(),
+					new HashMap<String, Object>());
 			map.put("current", false);
 			map.put("children", obj.children);
 			obj.json = Application.toJson(map);
 			update(obj, false, obj.children, obj.json);
-			
+
 			// create new version
 			obj.current = true;
 			obj.children = new LinkedList<Long>();
@@ -211,19 +209,19 @@ public class Db {
 			newRecord(obj);
 			return app.log.exit(obj);
 		} catch (Exception e) {
-			app.log.error(e, "Error creating new version for object %s", obj.getName());
+			app.log.error(e, "Error creating new version for object %s",
+					obj.getName());
 			throw new WrapperException(e);
 		}
 	}
 
 	/**
-	 * Updates record in DB.
-	 * Update existing version, create new version, store.
+	 * Updates record in DB. Update existing version, create new version, store.
 	 * 
 	 * @param base
 	 */
 	public <T extends Base> void store(T base) {
-		if(willStore(base)) {
+		if (willStore(base)) {
 			newVersion(base);
 			base.inBatch = false;
 		}
@@ -233,7 +231,7 @@ public class Db {
 	 * Special case: deleted object.
 	 */
 	<T extends Base> void storeDeleted(T base) {
-		if(base.isCurrent()) {
+		if (base.isCurrent()) {
 			newVersion(base);
 			base.inBatch = false;
 		}
@@ -254,8 +252,10 @@ public class Db {
 	 */
 	private <T extends Base> boolean anythingChanged(T obj) {
 		@SuppressWarnings("unchecked")
-		Base stored = retrieve(obj.getName(), (Class<? extends T>) obj.getClazz(), true);
-		if(stored == null) return true;
+		Base stored = retrieve(obj.getName(),
+				(Class<? extends T>) obj.getClazz(), true);
+		if (stored == null)
+			return true;
 		return !Application.toJson(obj).equals(stored.getJson());
 	}
 
@@ -271,7 +271,7 @@ public class Db {
 							+ questionMarks(recordSpec) + ")");
 			prepare(st, record);
 			int n = st.executeUpdate();
-			if(n != 1) {
+			if (n != 1) {
 				throw new Exception("More or less than 1 record inserted: " + n);
 			}
 		} catch (Exception e) {
@@ -287,7 +287,7 @@ public class Db {
 			@Cleanup
 			PreparedStatement st = conn
 					.prepareStatement("UPDATE APPLICATION SET CURRENT = ?, "
-							+ " CHILDREN = ?, JSON = ? " 
+							+ " CHILDREN = ?, JSON = ? "
 							+ "WHERE NAME=? AND CLASSNAME = ? AND VERSION = ?");
 			st.setBoolean(1, current);
 			st.setString(2, Application.toJson(children));
@@ -296,7 +296,7 @@ public class Db {
 			st.setString(5, record.getClazz().getCanonicalName());
 			st.setLong(6, record.getVersion());
 			int n = st.executeUpdate();
-			if(n != 1) {
+			if (n != 1) {
 				throw new Exception("More or less than 1 record updated: " + n);
 			}
 		} catch (Exception e) {
@@ -310,18 +310,19 @@ public class Db {
 	void updateCurrent(Base record) {
 		try {
 			@Cleanup
-			PreparedStatement st = conn.prepareStatement("UPDATE APPLICATION SET CURRENT = false WHERE NAME = ? AND CLASSNAME = ?");
+			PreparedStatement st = conn
+					.prepareStatement("UPDATE APPLICATION SET CURRENT = false WHERE NAME = ? AND CLASSNAME = ?");
 			st.setString(1, record.getName());
 			st.setString(2, record.getClazz().getCanonicalName());
 			st.executeUpdate();
-			
+
 			st = conn.prepareStatement("UPDATE APPLICATION SET CURRENT = true "
-							+ "WHERE NAME=? AND CLASSNAME = ? AND VERSION = ?");
+					+ "WHERE NAME=? AND CLASSNAME = ? AND VERSION = ?");
 			st.setString(1, record.getName());
 			st.setString(2, record.getClazz().getCanonicalName());
 			st.setLong(3, record.getVersion());
 			int n = st.executeUpdate();
-			if(n != 1) {
+			if (n != 1) {
 				throw new Exception("More or less than 1 record updated: " + n);
 			}
 		} catch (Exception e) {
@@ -380,11 +381,13 @@ public class Db {
 	 * @param clazz
 	 * @return object
 	 */
-	<T extends Base> T retrieve(String name, Class<? extends T> clazz) {
-		return retrieve(name, clazz, false);
+	<T extends Base> T retrieve(String name, Class<? extends T> clazz,
+			Object[] params) {
+		return retrieve(name, clazz, false, params);
 	}
-	
-	<T extends Base> T retrieve(String name, Class<? extends T> clazz, boolean noProxy) {
+
+	<T extends Base> T retrieve(String name, Class<? extends T> clazz,
+			boolean noProxy, Object... params) {
 		try {
 			app.log.entry(name, clazz, noProxy);
 			@Cleanup
@@ -397,8 +400,10 @@ public class Db {
 			if (rs.next()) {
 				String className = rs.getString("CLASSNAME");
 				@SuppressWarnings("unchecked")
-				T record = makeBase(name, (Class<? extends T>)Class.forName(className), rs.getString("JSON"));
-				if(noProxy) {
+				T record = makeBase(name,
+						(Class<? extends T>) Class.forName(className),
+						rs.getString("JSON"), params);
+				if (noProxy) {
 					return app.log.exit(record);
 				} else {
 					return app.log.exit(app.setProxies(record));
@@ -421,7 +426,8 @@ public class Db {
 	 * @param noProxy
 	 * @return version
 	 */
-	public <T extends Base> T retrieve(String name, Class<? extends T> clazz, long version, boolean noProxy) {
+	public <T extends Base> T retrieve(String name, Class<? extends T> clazz,
+			long version, boolean noProxy) {
 		try {
 			app.log.entry(name, clazz, version, noProxy);
 			@Cleanup
@@ -435,8 +441,10 @@ public class Db {
 			if (rs.next()) {
 				String className = rs.getString("CLASSNAME");
 				@SuppressWarnings("unchecked")
-				T record = makeBase(name, (Class<? extends T>)Class.forName(className), rs.getString("JSON"));
-				if(noProxy) {
+				T record = makeBase(name,
+						(Class<? extends T>) Class.forName(className),
+						rs.getString("JSON"));
+				if (noProxy) {
 					return app.log.exit(record);
 				} else {
 					return app.log.exit(app.setProxies(record));
@@ -450,14 +458,23 @@ public class Db {
 		}
 	}
 
-	private <T extends Base> T makeBase(String name, Class<? extends T> clazz, String json) {
+	private <T extends Base> T makeBase(String name, Class<? extends T> clazz,
+			String json, Object... params) {
 		try {
-			T base = clazz.getConstructor(String.class, Class.class)
-					.newInstance(name, clazz);
-			base.json = json;
-			Application.jsonClone(base, base);
-			base.app = app;
-			return base;
+			Constructor<?> constructor = app
+					.getConstructor(name, clazz, params);
+			if (constructor != null) {
+				@SuppressWarnings("unchecked")
+				T base = (T) constructor.newInstance(app.getConstructorParams(
+						name, clazz, params));
+				base.json = json;
+				Application.jsonClone(base, base);
+				base.app = app;
+				return base;
+			} else {
+				app.log.error("No suitable constructor for types %s", Arrays.deepToString(params));
+				return null;
+			}
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
@@ -504,12 +521,14 @@ public class Db {
 			ResultSet rs = st.executeQuery();
 			while (rs.next()) {
 				@SuppressWarnings("unchecked")
-				T record = (T) makeBase(rs.getString("NAME"), clazz, rs.getString("JSON"));
+				T record = (T) makeBase(rs.getString("NAME"), clazz,
+						rs.getString("JSON"));
 				ret.add(app.setProxies(record));
 			}
 			return app.log.exit(ret);
 		} catch (Exception e) {
-			app.log.error(e, "Error getting collection %s", clazz.getCanonicalName());
+			app.log.error(e, "Error getting collection %s",
+					clazz.getCanonicalName());
 			throw new WrapperException(e);
 		}
 	}
@@ -533,13 +552,15 @@ public class Db {
 			ResultSet rs = st.executeQuery();
 			while (rs.next()) {
 				@SuppressWarnings("unchecked")
-				T record = (T) makeBase(rs.getString("NAME"), base.clazz, rs.getString("JSON"));
+				T record = (T) makeBase(rs.getString("NAME"), base.clazz,
+						rs.getString("JSON"));
 				record.current = false;
 				ret.add(record);
 			}
 			return app.log.exit(ret);
 		} catch (Exception e) {
-			app.log.error(e, "Error getting versions for object %s", base.getName());
+			app.log.error(e, "Error getting versions for object %s",
+					base.getName());
 			throw new WrapperException(e);
 		}
 	}
@@ -604,16 +625,17 @@ public class Db {
 			log.setCaller(rs.getString("CALLER"));
 			log.setCallerClass(rs.getString("CALLERCLASS"));
 			log.setCallerLine(rs.getInt("CALLERLINE"));
-			
+
 			log.setMethod(rs.getString("METHOD"));
 			log.setMethodClass(rs.getString("METHODCLASS"));
 			log.setMethodLine(rs.getInt("METHODLINE"));
-			
+
 			log.setName(rs.getString("NAME"));
 			log.setClazz(rs.getString("CLASSNAME"));
 			log.setKind(LogEntry.Kind.fromInteger(rs.getInt("KIND")));
 			log.setMessage(rs.getString("MESSAGE"));
-			log.setObjList(Application.fromJson(rs.getString("OBJLIST"), new ArrayList<>()));
+			log.setObjList(Application.fromJson(rs.getString("OBJLIST"),
+					new ArrayList<>()));
 			log.setThread(rs.getString("THREAD"));
 			log.setTimestamp(rs.getTimestamp("STAMP").toLocalDateTime());
 			return log;

@@ -28,9 +28,14 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 public class Base {
 
 	// ID fields
-	final String name;
-	final Class<? extends Base> clazz;
+	String name;
+	Class<? extends Base> clazz;
 
+	// package private
+	Base() {
+		
+	}
+	
 	/**
 	 * Constructor.
 	 * 

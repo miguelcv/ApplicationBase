@@ -47,7 +47,6 @@ public class SetterAdvice implements ProxyAdvice {
 		if (!base.isInBatch()) {
 			base.getApp().store(base);
 		}
-
 		return null;
 	}
 

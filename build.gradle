@@ -1,5 +1,5 @@
 group = 'org.mcv.app'
-version = '1.0'
+version = '1.1'
 
 project.ext {
     main = "${project.group}.Main"
@@ -15,7 +15,9 @@ dependencies {
 	compile 'com.fasterxml.jackson.core:jackson-annotations:2.8.5'
 	compile 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.8.5'
 	compile "org.jodd:jodd-proxetta:3.8.0"
+	compile 'com.github.javaparser:javaparser-core:2.3.0'
+	//compile(group: 'org.mcv.app', name: 'ApplicationBase', version: '1.1', classifier: 'sources', ext: 'zip')
 }
 
-apply from: "${project.localPluginsUrl}/exec/1.0/exec-1.0.gradle"
+apply from: "${project.localPluginsUrl}/execWithSource/1.0/execWithSource-1.0.gradle"
 
