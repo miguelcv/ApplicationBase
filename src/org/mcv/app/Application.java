@@ -422,8 +422,7 @@ public class Application {
 					true, "utf-8");
 			DateTimeFormatter formatter = DateTimeFormatter
 					.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-			out.printf(
-					"%s [%s] %-6s method: %s.%s(%s) caller: %s.%s(%s)%n%s%n",
+			String msg = String.format("%s [%s] %-6s method: %s.%s(%s) caller: %s.%s(%s)%n%s",
 					entry.getTimestamp().format(formatter),
 					entry.getThread(),
 					entry.getKind().toString(),
@@ -433,21 +432,10 @@ public class Application {
 							.getMethodLine()) : "",
 					entry.getCallerClass(),
 					entry.getCaller(),
-					entry.getCallerLine() > -0 ? String.valueOf(entry.getCallerLine()) : "", formatObjects(entry));
-			
+					entry.getCallerLine() > -0 ? String.valueOf(entry.getCallerLine()) : "", formatObjects(entry));			
+			out.println(msg);
 			if(logToConsole) {
-				System.out.printf(
-						"%s [%s] %-6s method: %s.%s(%s) caller: %s.%s(%s)%n%s%n",
-						entry.getTimestamp().format(formatter),
-						entry.getThread(),
-						entry.getKind().toString(),
-						entry.getClazz(),
-						entry.getMethod(),
-						entry.getMethodLine() >= 0 ? String.valueOf(entry.getMethodLine()) : "",	
-						entry.getCallerClass(),
-						entry.getCaller(),
-						entry.getCallerLine() > -0 ? String.valueOf(entry.getCallerLine()) : "",
-						formatObjects(entry));
+				System.out.println(msg);
 			}
 			return true;
 		} catch (Exception e) {
