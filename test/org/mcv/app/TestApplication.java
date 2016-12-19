@@ -8,12 +8,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import lombok.extern.slf4j.Slf4j;
-
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-@Slf4j
 public class TestApplication {
 
 	@BeforeClass
@@ -40,11 +37,12 @@ public class TestApplication {
 	@Test
 	public void testApplicationDB() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		} finally {
 			app.getDb().close();
@@ -55,6 +53,7 @@ public class TestApplication {
 	@Test
 	public void testApplicationBaseCreate() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			// create and persist
@@ -70,7 +69,7 @@ public class TestApplication {
 			assertTrue(base.equals(copy));
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}
 	}
@@ -79,6 +78,7 @@ public class TestApplication {
 	@Test
 	public void testApplicationBaseSubCreate() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			// create and persist
@@ -91,7 +91,7 @@ public class TestApplication {
 			assertTrue(base.equals(copy));
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}
 	}
@@ -100,6 +100,7 @@ public class TestApplication {
 	@Test
 	public void testApplicationBaseDeleted() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			// create and persist
@@ -120,7 +121,7 @@ public class TestApplication {
 			
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}
 	}
@@ -129,6 +130,7 @@ public class TestApplication {
 	@Test
 	public void testApplicationBaseChanged() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			// create and persist
@@ -143,7 +145,7 @@ public class TestApplication {
 
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}
 	}
@@ -152,6 +154,7 @@ public class TestApplication {
 	@Test
 	public void testApplicationGetList() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			List<BaseSub> list1 = new ArrayList<>();
@@ -179,7 +182,7 @@ public class TestApplication {
 			}
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}
 	}
@@ -187,6 +190,7 @@ public class TestApplication {
 	@Test
 	public void testGetLogs() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
@@ -202,12 +206,12 @@ public class TestApplication {
 			base.error(new Exception("Really bad"), "This is an error message");
 			assertTrue(base.getVersion() == 5);
 			List<LogEntry> logs = base.getLogs();
-			for(LogEntry log : logs) {
-				System.out.println(log);
+			for(LogEntry logentry : logs) {
+				System.out.println(logentry);
 			}
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}		
 	}
@@ -215,6 +219,7 @@ public class TestApplication {
 	@Test
 	public void testBatch() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
@@ -232,12 +237,12 @@ public class TestApplication {
 			base.error(new Exception("Really bad"), "This is an error message");
 			assertTrue(base.getVersion() == 2);
 			List<LogEntry> logs = base.getLogs();
-			for(LogEntry log : logs) {
-				System.out.println(log);
+			for(LogEntry logentry : logs) {
+				System.out.println(logentry);
 			}
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}		
 	}
@@ -245,6 +250,7 @@ public class TestApplication {
 	@Test
 	public void testNothingChanged() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
@@ -256,7 +262,7 @@ public class TestApplication {
 			assertTrue(base.getVersion() == 2);
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}		
 	}
@@ -264,6 +270,7 @@ public class TestApplication {
 	@Test
 	public void testUndoRedo() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			
@@ -369,7 +376,7 @@ public class TestApplication {
 			
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}
 	}
@@ -378,6 +385,7 @@ public class TestApplication {
 	@Test
 	public void testGetVersions() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
@@ -406,7 +414,7 @@ public class TestApplication {
 			
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}		
 	}
@@ -416,6 +424,7 @@ public class TestApplication {
 	@Test
 	public void testGetAllLogs() {
 		Application app = mkApp();
+		Base logger = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
@@ -433,7 +442,7 @@ public class TestApplication {
 			assertTrue(logs.size() > 0);
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			logger.error(t.toString(), t);
 			fail(t.toString());
 		}		
 	}
@@ -441,6 +450,7 @@ public class TestApplication {
 	@Test
 	public void testAutoDeclare() {
 		Application app = mkApp();
+		Base log = app.create();
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create();
@@ -448,7 +458,7 @@ public class TestApplication {
 			assertEquals(BaseSub.class, base.getClazz());
 		} catch(Exception e) {
 			Throwable t = WrapperException.unwrap(e);
-			log.error("{}", t, t);
+			log.error(t.toString(), t);
 			fail(t.toString());
 		}		
 	}
