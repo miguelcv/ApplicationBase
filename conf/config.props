@@ -1,0 +1,23 @@
+# location of H2 DB
+# must start with "jdbc:h2:" followed by path, where %s becomes application's name
+# optionally followed by other h2 connection string directives, see <http://www.h2database.com/html/features.html#database_url>
+h2.url=jdbc:h2:./DB/%s
+
+# location of application logs
+# if ends in .log, then a single file will be used for all application logging
+# else it is assumed to be a directory, where logs will be placed with separate logfiles per class/object
+app.logLocation=./logs
+
+# log level: NONE, ERROR, WARN, INFO, DEBUG
+app.logLevel=DEBUG
+
+# individual Base subclasses may specify a log directory or log file (with log level) as follows:
+#<class>.logLocation=<location> OR <location>/<name>.log
+#<class>.logLevel=<level>
+
+# individual Base subclass instances may specify a log file (with log level) as follows:
+#<class>.<name>.logLocation=<location>.log
+#<class>.<name>.logLevel=<level>
+
+org.mcv.app.BaseSub.base9.logLocation=./logs/b9.log
+org.mcv.app.BaseSub.base9.logLevel=INFO
