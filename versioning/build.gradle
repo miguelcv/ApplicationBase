@@ -1,12 +1,83 @@
-println 
-
 ext {
 	ver = new Properties()	
 	verFile = new File(System.getenv("HOME")+"/.gradle/version.props")
+	ver = new Properties()
+	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
 }
 
-verFile.withInputStream {
-    ver.load(it)
+def projectName() {
+	def f = new File(""+project.projectDir)
+	def name = f.getName()
+	def parent = f.getParentFile().getName()
+	return parent + "/" + name
+}
+
+def load(file) {
+	if(!file.exists()) {
+		new File(System.getenv("HOME") + "/.gradle/versions/" + projectName()).mkdirs()
+		ver.setProperty("build", "0")
+		ver.setProperty("major", "0")
+		ver.setProperty("minor", "0")
+		ver.setProperty("patch", "0")
+		store(file)
+	}
+	file.withInputStream {
+	    ver.load(it)
+	}
+	ver = new Properties()
+	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
+}
+
+def projectName() {
+	def f = new File(""+project.projectDir)
+	def name = f.getName()
+	def parent = f.getParentFile().getName()
+	return parent + "/" + name
+}
+
+def load(file) {
+	if(!file.exists()) {
+		new File(System.getenv("HOME") + "/.gradle/versions/" + projectName()).mkdirs()
+		ver.setProperty("build", "0")
+		ver.setProperty("major", "0")
+		ver.setProperty("minor", "0")
+		ver.setProperty("patch", "0")
+		store(file)
+	}
+	file.withInputStream {
+	    ver.load(it)
+	}
+	ver = new Properties()
+	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
+}
+
+def projectName() {
+	def f = new File(""+project.projectDir)
+	def name = f.getName()
+	def parent = f.getParentFile().getName()
+	return parent + "/" + name
+}
+
+def load(file) {
+	if(!file.exists()) {
+		new File(System.getenv("HOME") + "/.gradle/versions/" + projectName()).mkdirs()
+		ver.setProperty("build", "0")
+		ver.setProperty("major", "0")
+		ver.setProperty("minor", "0")
+		ver.setProperty("patch", "0")
+		store(file)
+	}
+	file.withInputStream {
+	    ver.load(it)
+	}
+}
+
+load(verFile)
+
+def store(file) {
+	ver.store(file.newWriter(), null)
+	ver = new Properties()
+	load(file)
 }
 
 def getBuild() {
@@ -14,10 +85,26 @@ def getBuild() {
 }
 
 def getVersion() {
+	def branch = getBranch()
+	if(branch=="master") return getMasterVersion()
+	if(branch.startsWith("hotfix")) return getMasterNextPatch()
+	return getDevelVersion();
+}
+
+def getMasterVersion() {
 	return ver.major + "." + ver.minor + "." + ver.patch
 }
 
-def getMavenVersion(branch) {
+def getMasterNextPatch() {
+	return ver.major + "." + ver.minor + "." + (Integer.valueOf(ver.patch)+1)
+}
+
+def getDevelVersion() {
+	return ver.major + "." + (Integer.valueOf(ver.minor)+1)
+}
+
+def getArtifactVersion(branch) {
+	if(branch == null) branch = getBranch()
 	if(branch == "master")
 		return ver.major + "." + ver.minor + "." + ver.patch
 	if(branch == "develop")
@@ -31,7 +118,7 @@ def setBuild() {
 	def num = ver.build as Integer
 	if(num == null) num = 0
 	ver.setProperty("build", (num + 1).toString())
-	ver.store(verFile.newWriter(), null)
+	store(verFile)
 }
 
 def setVersion() {
@@ -39,16 +126,14 @@ def setVersion() {
 	if(minor == null) minor = 0
 	ver.setProperty("minor", (minor+1).toString())
 	ver.setProperty("patch", "0")
-	ver.store(verFile.newWriter(), null)
-	commit()
+	store(verFile)
 }
 
 def setPatch() {
 	def patch = ver.patch as Integer
 	if(patch == null) patch = 0
 	ver.setProperty("patch", (patch+1).toString())
-	ver.store(verFile.newWriter(), null)
-	commit()
+	store(verFile)
 }
 
 def getBranch() {
@@ -107,7 +192,259 @@ project.ext {
     fnVersion='5.2'
 }
 
-apply from: "${project.localPluginsUrl}/default.gradle"
+buildscript {
+    repositories {
+        maven {
+            credentials {
+                username "${project.myLogin}"
+                password "${project.myPassword}"
+            }
+            url uri("${project.artifactoryUrl}/repo")
+        }
+    }
+}
+
+apply {
+    plugin 'java'
+    plugin 'eclipse'
+    plugin 'maven-publish'
+    plugin 'project-report'
+}
+
+sourceSets.main.output.classesDir = new File(buildDir, "classes/main")
+sourceSets.test.output.classesDir = new File(buildDir, "classes/test")
+
+if(!project.hasProperty('layout') || !project.layout.equals("maven")) {
+    buildDir = 'bin'
+    sourceSets.main.java.srcDirs = ['src']
+    sourceSets.main.resources.srcDirs = ['res']
+    sourceSets.test.java.srcDirs = ['test']
+    sourceSets.test.resources.srcDirs = ['test-res', 'conf']
+    sourceSets.main.output.resourcesDir = sourceSets.main.output.classesDir
+}
+
+configurations { compileOnly }
+configurations { filenetDep }
+
+sourceSets {
+    main.compileClasspath += configurations.compileOnly
+    test.compileClasspath += configurations.compileOnly
+    test.runtimeClasspath += configurations.compileOnly
+
+    main.compileClasspath += configurations.filenetDep
+    test.compileClasspath += configurations.filenetDep
+    test.runtimeClasspath += configurations.filenetDep
+}
+
+eclipse.classpath.plusConfigurations += [configurations.compileOnly, configurations.filenetDep]
+eclipse.classpath.defaultOutputDir = sourceSets.main.output.classesDir
+
+configurations.compile.transitive = true
+if(!project.hasProperty('javaVersion')) {
+    project.ext.javaVersion = '1.8'
+}
+sourceCompatibility = project.javaVersion
+targetCompatibility = project.javaVersion
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    if(project.ext.javaVersion == '1.4') options.bootClasspath = project.ext.bootpath4
+    if(project.ext.javaVersion == '1.5') options.bootClasspath = project.ext.bootpath5
+    if(project.ext.javaVersion == '1.6') options.bootClasspath = project.ext.bootpath6
+    if(project.ext.javaVersion == '1.7') options.bootClasspath = project.ext.bootpath7
+    if(project.ext.javaVersion == '1.8') options.bootClasspath = project.ext.bootpath8
+}
+
+eclipse.classpath {
+    defaultOutputDir = file('bin/classes/main')
+    file.withXml { n ->
+        n.asNode().classpathentry.findAll { it.@path.startsWith('test') || it.@path.startsWith('conf') }
+        .each { it.@output = 'bin/classes/test' }
+    }
+}
+
+test {
+    testLogging { exceptionFormat = 'full' }
+}
+
+task viewTestresults {
+    doLast {
+        def bd = buildDir.toString().replaceAll('\\\\', '/')
+        java.awt.Desktop.getDesktop().browse(new URI("file:///${bd}/reports/tests/index.html"))
+    }
+}
+configure(viewTestresults) {
+    group = 'Verification'
+    description = 'View JUnit reports'
+}
+
+javadoc {
+    options.encoding = "UTF-8"
+    classpath = project.sourceSets.main.compileClasspath
+}
+
+if (JavaVersion.current().isJava8Compatible()) {
+    tasks.withType(Javadoc) {
+        // disable the crazy super-strict doclint tool in Java 8
+        //noinspection SpellCheckingInspection
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+}
+
+jar.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+task viewJavadoc {
+    doLast {
+        def bd = buildDir.toString().replaceAll('\\\\', '/')
+        java.awt.Desktop.getDesktop().browse(new URI("file:///${bd}/docs/javadoc/index.html"))
+    }
+}
+configure(viewJavadoc) {
+    group = 'Documentation'
+    description = 'View generated javadocs'
+}
+viewJavadoc.dependsOn('javadoc')
+
+repositories {
+    maven {
+        credentials {
+            username "${project.myLogin}"
+            password "${project.myPassword}"
+        }
+        url "${project.artifactoryUrl}/repo"
+    }
+    mavenCentral()
+    flatDir { dirs 'lib' }
+}
+
+if(new File("${project.localPluginsUrl}/versions.gradle").exists())
+	apply from: "${project.localPluginsUrl}/versions.gradle"
+else 
+	apply from: "build-scripts/versions.gradle"
+
+dependencies {
+    testCompile libs.junit4
+    compileOnly libs.lombok1
+}
+
+task sourcesZip(type: Zip, dependsOn:classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task javadocZip(type: Zip, dependsOn:javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+task distZip(type: Zip) {
+    classifier = 'dist'
+    from project.libsDir
+}
+
+task copyConf(dependsOn: jar, type: Copy)  {
+    from "conf"
+    into "${libsDir}/conf"
+}
+
+artifacts {
+    archives sourcesZip
+    archives javadocZip
+    archives distZip
+}
+
+def isMaster() {
+	def ret = true;
+	new ByteArrayOutputStream().withStream { os ->
+		project.exec {
+			executable = 'cmd'
+			args = "/k git branch".split(" ").toList()
+			standardOutput = os
+		}
+		def out = os.toString()
+		ret = out.indexOf("* master") >= 0;
+	}
+	println ret
+	return ret;
+}
+
+if(!project.hasProperty("master")) {
+	ext.master = isMaster() 
+}
+
+def mavenCoords(deps, dep) {
+    def node = deps.appendNode('dependency')
+    node.appendNode('groupId', dep.group)
+    node.appendNode('artifactId', dep.name)
+    node.appendNode('version', dep.version)
+    node.appendNode('scope', 'compile')
+}
+
+publishing {
+    publications {
+    
+    	version = getArtifactVersion()
+    	
+        mavenJava(MavenPublication) {
+            from components.java
+            artifact sourcesZip { classifier "sources" }
+            artifact javadocZip { classifier "javadoc" }
+            artifact distZip { classifier "dist" }
+        }
+    }
+    repositories {
+        maven {
+            credentials {
+                username "${project.myLogin}"
+                password "${project.myPassword}"
+            }
+            url project.master ? "${project.artifactoryUrl}/libs-release-local/" :
+            	"${project.artifactoryUrl}/libs-snapshot-local/"
+            
+        }
+    }
+}
+
+publish.dependsOn(assemble)
+
+import java.io.*;
+import groovy.text.SimpleTemplateEngine;
+
+// helper function
+ext.runcmd = { String prog, String params ->
+    String ret = "";
+    new ByteArrayOutputStream().withStream { os ->
+        project.exec {
+            executable = prog
+            ignoreExitValue = true
+            args = params.split(' ').toList()
+            standardOutput = os
+        }
+        ret = os.toString();
+        println(ret)
+    }
+    return ret
+}
+
+ext.download = { String from, String to ->
+    runcmd("curl", "-k --user ${myLogin}:${myPassword} -o ${to} ${from}")
+}
+
+if(!project.file("settings.gradle").exists()) {
+    project.file("settings.gradle") << "rootProject.name = '" + project.name + "'\r\n"
+}
+
+task viewDependencies {
+    doLast {
+        def bd = buildDir.toString().replaceAll('\\\\', '/')
+        java.awt.Desktop.getDesktop().browse(new URI("file://${bd}/reports/project/dependencies/index.html"))
+    }
+}
+configure(viewDependencies) {
+    group = 'Report'
+    description = 'View project dependencies report'
+}
+viewDependencies.dependsOn('htmlDependencyReport')
 
 dependencies {
 }
@@ -116,27 +453,36 @@ apply from: "${project.localPluginsUrl}/jar.gradle"
 
 task release {
 	doLast {
-		def branch = getBranch()
-		checkout("master")
 		setVersion()
-		println("Master version now: " + getVersion())
-		checkout("develop")
-		setVersion()
-		println("Develop version now: " + getVersion())
-		checkout(branch)
+		println("Development version now: " + getDevelVersion())
+		println("Master version now: " + getMasterVersion())
 	}
 }
 
 task hotfix {
 	doLast {
-		def branch = getBranch()
-		checkout("master")
 		setPatch()
-		println("Master version now: " + getVersion())
-		checkout(branch)		
+		println("Patch version now: " + getMasterVersion())
 	}
 }
 
 assemble.doLast {
 	setBuild()
+	println("Build# " + getBuild())
+	println("Version " + project.version)
+	println("Artifact-version: " + getArtifactVersion())
+}
+
+task publ {
+	def branch = getBranch()
+	if(branch.startsWith("feature")) {
+		println "Do not publish feature branches"
+	} else if(branch.startsWith("hotfix")) {
+		println "Do not publish hotfix branches"
+	} else {
+		project.exec {
+			executable = 'cmd'
+			args = ["gradle.bat", "publish"]
+		}
+	}
 }
