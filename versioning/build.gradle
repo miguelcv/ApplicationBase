@@ -55,6 +55,8 @@ def getDevelVersion() {
 	return ver.major + "." + (Integer.valueOf(ver.minor)+1)
 }
 
+def rcnum = 1
+
 def getArtifactVersion(branch) {
 	if(branch == null) branch = getBranch()
 	if(branch == "master")
@@ -62,7 +64,7 @@ def getArtifactVersion(branch) {
 	if(branch == "develop")
 		return ver.major + "." + ver.minor + "-SNAPSHOT"
 	if(branch.startsWith("release")) {
-		return ver.major + "." + ver.minor + "-RC"
+		return ver.major + "." + ver.minor + "-RC" + rcnum
 	}
 }
 
@@ -405,16 +407,49 @@ assemble.doLast {
 	println("Artifact-version: " + getArtifactVersion())
 }
 
+def doPublish() {
+	project.exec {
+		executable = 'cmd'
+		args = ["/k", "gradle", "publish"]
+	}
+}
+
+def artifactExists() {
+	def path = project.artifactoryUrl + "/libs-release-local/" + group.replace(".", "/") + "/" + project.name + "/" + getArtifactVersion() + "/" + project.name + "-" + getArtifactVersion() + ".jar"
+	def url = new URL(path)
+	def authString = project.myLogin + ":" + project.myPassword;
+	String authStringEnc = Base64.getEncoder().encodeToString(authString.getBytes());
+	HttpURLConnection connection = url.openConnection();
+	connection.setRequestProperty("Authorization", "Basic " + authStringEnc);
+	connection.setRequestMethod("HEAD");
+	connection.connect()
+	def code = connection.getResponseCode()
+	return code < 400
+}
+
 task publ {
+  doLast {
 	def branch = getBranch()
 	if(branch.startsWith("feature")) {
 		println "Do not publish feature branches"
 	} else if(branch.startsWith("hotfix")) {
 		println "Do not publish hotfix branches"
+	} else if(branch == "develop") {
+		doPublish()
 	} else {
-		project.exec {
-			executable = 'cmd'
-			args = ["gradle.bat", "publish"]
+		// check if exists!
+		// release ==> bump RC<n>
+		if(branch.startsWith("release")) {
+			for(rcnum=1; ; rcnum++) {
+				if(!artifactExists()) break;
+			}
+			doPublish()
 		}
+		// master ==> reject
+		if(branch == "master") {
+			if(!artifactExists()) doPublish();
+			else println("This artifact was published previously!")
+		}		
 	}
+  }
 }
