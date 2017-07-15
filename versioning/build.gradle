@@ -3,8 +3,18 @@ ext {
 	verFile = new File(project.projectDir, "version.props")
 }
 
-verFile.withInputStream {
-    ver.load(it)
+def load(file) {
+	file.withInputStream {
+	    ver.load(it)
+	}
+}
+
+load(verFile)
+
+def store(file) {
+	ver.store(file.newWriter(), null)
+	ver = new Properties()
+	load(file)
 }
 
 def getBuild() {
@@ -12,10 +22,26 @@ def getBuild() {
 }
 
 def getVersion() {
+	def branch = getBranch()
+	if(branch=="master") return getMasterVersion()
+	if(branch.startsWith("hotfix")) return getMasterNextPatch()
+	return getDevelVersion();
+}
+
+def getMasterVersion() {
 	return ver.major + "." + ver.minor + "." + ver.patch
 }
 
-def getMavenVersion(branch) {
+def getMasterNextPatch() {
+	return ver.major + "." + ver.minor + "." + (Integer.valueOf(ver.patch)+1)
+}
+
+def getDevelVersion() {
+	return ver.major + "." + (Integer.valueOf(ver.minor)+1)
+}
+
+def getArtifactVersion(branch) {
+	if(branch == null) branch = getBranch()
 	if(branch == "master")
 		return ver.major + "." + ver.minor + "." + ver.patch
 	if(branch == "develop")
@@ -29,7 +55,7 @@ def setBuild() {
 	def num = ver.build as Integer
 	if(num == null) num = 0
 	ver.setProperty("build", (num + 1).toString())
-	ver.store(verFile.newWriter(), null)
+	store(verFile)
 }
 
 def setVersion() {
@@ -37,16 +63,14 @@ def setVersion() {
 	if(minor == null) minor = 0
 	ver.setProperty("minor", (minor+1).toString())
 	ver.setProperty("patch", "0")
-	ver.store(verFile.newWriter(), null)
-	commit()
+	store(verFile)
 }
 
 def setPatch() {
 	def patch = ver.patch as Integer
 	if(patch == null) patch = 0
 	ver.setProperty("patch", (patch+1).toString())
-	ver.store(verFile.newWriter(), null)
-	commit()
+	store(verFile)
 }
 
 def getBranch() {
@@ -65,26 +89,6 @@ def getBranch() {
 		}
 	}
 	return ret
-}
-
-def checkout(branch) {
-	new ByteArrayOutputStream().withStream { os ->
-		project.exec {
-			executable = 'git'
-			args = ["checkout", branch]
-			standardOutput = os
-		}
-	}
-}
-
-def commit() {
-	new ByteArrayOutputStream().withStream { os ->
-		project.exec {
-			executable = 'git'
-			args = ["commit", "-a", "-m", "Set version to " + getVersion()]
-			standardOutput = os
-		}
-	}
 }
 
 group = "nl.novadoc.utils"
@@ -114,27 +118,22 @@ apply from: "${project.localPluginsUrl}/jar.gradle"
 
 task release {
 	doLast {
-		def branch = getBranch()
-		checkout("master")
 		setVersion()
-		println("Master version now: " + getVersion())
-		checkout("develop")
-		setVersion()
-		println("Develop version now: " + getVersion())
-		checkout(branch)
+		println("Development version now: " + getDevelVersion())
+		println("Master version now: " + getMasterVersion())
 	}
 }
 
 task hotfix {
 	doLast {
-		def branch = getBranch()
-		checkout("master")
 		setPatch()
-		println("Master version now: " + getVersion())
-		checkout(branch)		
+		println("Patch version now: " + getMasterVersion())
 	}
 }
 
 assemble.doLast {
 	setBuild()
+	println("Build# " + getBuild())
+	println("Version " + project.version)
+	println("Artifact-version: " + getArtifactVersion())
 }
