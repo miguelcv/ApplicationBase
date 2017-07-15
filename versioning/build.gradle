@@ -1,6 +1,8 @@
+println 
+
 ext {
 	ver = new Properties()	
-	verFile = new File(project.projectDir, "version.props")
+	verFile = new File(System.getenv("HOME")+"/.gradle/version.props")
 }
 
 verFile.withInputStream {
