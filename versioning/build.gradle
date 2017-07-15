@@ -81,7 +81,7 @@ def commit() {
 	new ByteArrayOutputStream().withStream { os ->
 		project.exec {
 			executable = 'git'
-			args = ["commit", "-a", "-m", "Set version to " + getVersion()]
+			args = ["commit", "version.props", "-m", "Set version to " + getVersion()]
 			standardOutput = os
 		}
 	}
