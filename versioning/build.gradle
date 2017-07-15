@@ -1,52 +1,4 @@
 ext {
-	ver = new Properties()	
-	verFile = new File(System.getenv("HOME")+"/.gradle/version.props")
-	ver = new Properties()
-	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
-}
-
-def projectName() {
-	def f = new File(""+project.projectDir)
-	def name = f.getName()
-	def parent = f.getParentFile().getName()
-	return parent + "/" + name
-}
-
-def load(file) {
-	if(!file.exists()) {
-		new File(System.getenv("HOME") + "/.gradle/versions/" + projectName()).mkdirs()
-		ver.setProperty("build", "0")
-		ver.setProperty("major", "0")
-		ver.setProperty("minor", "0")
-		ver.setProperty("patch", "0")
-		store(file)
-	}
-	file.withInputStream {
-	    ver.load(it)
-	}
-	ver = new Properties()
-	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
-}
-
-def projectName() {
-	def f = new File(""+project.projectDir)
-	def name = f.getName()
-	def parent = f.getParentFile().getName()
-	return parent + "/" + name
-}
-
-def load(file) {
-	if(!file.exists()) {
-		new File(System.getenv("HOME") + "/.gradle/versions/" + projectName()).mkdirs()
-		ver.setProperty("build", "0")
-		ver.setProperty("major", "0")
-		ver.setProperty("minor", "0")
-		ver.setProperty("patch", "0")
-		store(file)
-	}
-	file.withInputStream {
-	    ver.load(it)
-	}
 	ver = new Properties()
 	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
 }
@@ -152,26 +104,6 @@ def getBranch() {
 		}
 	}
 	return ret
-}
-
-def checkout(branch) {
-	new ByteArrayOutputStream().withStream { os ->
-		project.exec {
-			executable = 'git'
-			args = ["checkout", branch]
-			standardOutput = os
-		}
-	}
-}
-
-def commit() {
-	new ByteArrayOutputStream().withStream { os ->
-		project.exec {
-			executable = 'git'
-			args = ["commit", "version.props", "-m", "Set version to " + getVersion()]
-			standardOutput = os
-		}
-	}
 }
 
 group = "nl.novadoc.utils"
@@ -474,15 +406,19 @@ assemble.doLast {
 }
 
 task publ {
-	def branch = getBranch()
-	if(branch.startsWith("feature")) {
-		println "Do not publish feature branches"
-	} else if(branch.startsWith("hotfix")) {
-		println "Do not publish hotfix branches"
-	} else {
-		project.exec {
-			executable = 'cmd'
-			args = ["gradle.bat", "publish"]
+	doLast {
+		def branch = getBranch()
+		println(branch)
+		if(branch.startsWith("feature")) {
+			println "Do not publish feature branches"
+		} else if(branch.startsWith("hotfix")) {
+			println "Do not publish hotfix branches"
+		} else {
+			println('exec publish')
+			project.exec {
+				executable = 'cmd'
+				args = ["gradle.bat", "publish"]
+			}
 		}
 	}
 }
