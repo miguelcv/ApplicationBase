@@ -38,6 +38,7 @@ def setVersion() {
 	ver.setProperty("minor", (minor+1).toString())
 	ver.setProperty("patch", "0")
 	ver.store(verFile.newWriter(), null)
+	commit()
 }
 
 def setPatch() {
@@ -45,6 +46,7 @@ def setPatch() {
 	if(patch == null) patch = 0
 	ver.setProperty("patch", (patch+1).toString())
 	ver.store(verFile.newWriter(), null)
+	commit()
 }
 
 def getBranch() {
@@ -70,6 +72,16 @@ def checkout(branch) {
 		project.exec {
 			executable = 'git'
 			args = ["checkout", branch]
+			standardOutput = os
+		}
+	}
+}
+
+def commit() {
+	new ByteArrayOutputStream().withStream { os ->
+		project.exec {
+			executable = 'git'
+			args = ["commit", "-a", "-m", "Set version to " + getVersion()]
 			standardOutput = os
 		}
 	}
@@ -105,11 +117,9 @@ task release {
 		def branch = getBranch()
 		checkout("master")
 		setVersion()
-		commit()
 		println("Master version now: " + getVersion())
 		checkout("develop")
 		setVersion()
-		commit()
 		println("Develop version now: " + getVersion())
 		checkout(branch)
 	}
@@ -120,7 +130,6 @@ task hotfix {
 		def branch = getBranch()
 		checkout("master")
 		setPatch()
-		commit()
 		println("Master version now: " + getVersion())
 		checkout(branch)		
 	}
