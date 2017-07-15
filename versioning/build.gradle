@@ -1,0 +1,131 @@
+ext {
+	ver = new Properties()	
+	verFile = new File(project.projectDir, "version.props")
+}
+
+verFile.withInputStream {
+    ver.load(it)
+}
+
+def getBuild() {
+	return ver.build
+}
+
+def getVersion() {
+	return ver.major + "." + ver.minor + "." + ver.patch
+}
+
+def getMavenVersion(branch) {
+	if(branch == "master")
+		return ver.major + "." + ver.minor + "." + ver.patch
+	if(branch == "develop")
+		return ver.major + "." + ver.minor + "-SNAPSHOT"
+	if(branch.startsWith("release")) {
+		return ver.major + "." + ver.minor + "-RC"
+	}
+}
+
+def setBuild() {
+	def num = ver.build as Integer
+	if(num == null) num = 0
+	ver.setProperty("build", (num + 1).toString())
+	ver.store(verFile.newWriter(), null)
+}
+
+def setVersion() {
+	def minor = ver.minor as Integer
+	if(minor == null) minor = 0
+	ver.setProperty("minor", (minor+1).toString())
+	ver.setProperty("patch", "0")
+	ver.store(verFile.newWriter(), null)
+}
+
+def setPatch() {
+	def patch = ver.patch as Integer
+	if(patch == null) patch = 0
+	ver.setProperty("patch", (patch+1).toString())
+	ver.store(verFile.newWriter(), null)
+}
+
+def getBranch() {
+	def ret = "master"
+	new ByteArrayOutputStream().withStream { os ->
+		project.exec {
+			executable = 'git'
+			args = ["branch"]
+			standardOutput = os
+		}
+		def out = os.toString()
+		out.eachLine { line, count ->
+			if(line.startsWith("*")) {
+				ret = line.substring(2);
+			}	
+		}
+	}
+	return ret
+}
+
+def checkout(branch) {
+	new ByteArrayOutputStream().withStream { os ->
+		project.exec {
+			executable = 'git'
+			args = ["checkout", branch]
+			standardOutput = os
+		}
+	}
+}
+
+group = "nl.novadoc.utils"
+version = getVersion()
+
+project.ext {
+    layout="eclipse"
+    javaVersion="1.8"
+    useUtils=true
+    useLogging=true
+    useLog4j=false
+    executable=false
+    fatJar=false
+    srcJar=false
+    encryptConf=false
+    windowsExe=false
+    useFileNetLibs=false
+    fnVersion='5.2'
+}
+
+apply from: "${project.localPluginsUrl}/default.gradle"
+
+dependencies {
+}
+
+apply from: "${project.localPluginsUrl}/jar.gradle"
+
+task release {
+	doLast {
+		def branch = getBranch()
+		checkout("master")
+		setVersion()
+		commit()
+		println("Master version now: " + getVersion())
+		checkout("develop")
+		setVersion()
+		commit()
+		println("Develop version now: " + getVersion())
+		checkout(branch)
+	}
+}
+
+task hotfix {
+	doLast {
+		def branch = getBranch()
+		checkout("master")
+		setPatch()
+		commit()
+		println("Master version now: " + getVersion())
+		checkout(branch)		
+	}
+}
+
+assemble.doLast {
+	setBuild()
+}
