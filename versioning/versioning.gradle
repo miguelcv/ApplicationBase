@@ -1,0 +1,189 @@
+ext {
+	ver = new Properties()
+	verFile = new File(System.getenv("HOME") + "/.gradle/versions/" + projectName() + "/version.props")
+}
+
+def projectName() {
+	def f = new File(""+project.projectDir)
+	def name = f.getName()
+	def parent = f.getParentFile().getName()
+	return parent + "/" + name
+}
+
+def load(file) {
+	if(!file.exists()) {
+		new File(System.getenv("HOME") + "/.gradle/versions/" + projectName()).mkdirs()
+		ver.setProperty("build", "0")
+		ver.setProperty("major", "0")
+		ver.setProperty("minor", "0")
+		ver.setProperty("patch", "0")
+		store(file)
+	}
+	file.withInputStream {
+	    ver.load(it)
+	}
+}
+
+load(verFile)
+
+def store(file) {
+	ver.store(file.newWriter(), null)
+	ver = new Properties()
+	load(file)
+}
+
+def getBuild() {
+	return ver.build
+}
+
+def getVersion() {
+	def branch = getBranch()
+	if(branch=="master") return getMasterVersion()
+	if(branch.startsWith("hotfix")) return getMasterNextPatch()
+	return getDevelVersion();
+}
+
+def getMasterVersion() {
+	return ver.major + "." + ver.minor + "." + ver.patch
+}
+
+def bump(s) {
+	return Integer.valueOf(s)+1
+}
+
+def getMasterNextPatch() {
+	return ver.major + "." + ver.minor + "." + bump(ver.patch)
+}
+
+def getDevelVersion() {
+	return ver.major + "." + bump(ver.minor)
+}
+
+def getArtifactVersion(branch) {
+	if(branch == null) branch = getBranch()
+	if(branch == "master")
+		return ver.major + "." + ver.minor + "." + ver.patch
+	if(branch == "develop")
+		return ver.major + "." + bump(ver.minor) + "-SNAPSHOT"
+	if(branch.startsWith("release")) {
+		return getRcNum()
+	}
+}
+
+def setBuild() {
+	def num = ver.build as Integer
+	if(num == null) num = 0
+	ver.setProperty("build", (num + 1).toString())
+	store(verFile)
+}
+
+def setVersion() {
+	def minor = ver.minor as Integer
+	if(minor == null) minor = 0
+	ver.setProperty("minor", (minor+1).toString())
+	ver.setProperty("patch", "0")
+	store(verFile)
+}
+
+def setPatch() {
+	def patch = ver.patch as Integer
+	if(patch == null) patch = 0
+	ver.setProperty("patch", (patch+1).toString())
+	store(verFile)
+}
+
+def getBranch() {
+	def ret = "master"
+	new ByteArrayOutputStream().withStream { os ->
+		project.exec {
+			executable = 'git'
+			args = ["branch"]
+			standardOutput = os
+		}
+		def out = os.toString()
+		out.eachLine { line, count ->
+			if(line.startsWith("*")) {
+				ret = line.substring(2);
+			}	
+		}
+	}
+	return ret
+}
+
+task release {
+	doLast {
+		setVersion()
+		println("Development version now: " + getDevelVersion())
+		println("Master version now: " + getMasterVersion())
+	}
+}
+
+task hotfix {
+	doLast {
+		setPatch()
+		println("Patch version now: " + getMasterVersion())
+	}
+}
+
+assemble.doLast {
+	setBuild()
+}
+
+def doPublish() {
+	project.exec {
+		executable = 'cmd'
+		args = ["/k", "gradle", "publish"]
+	}
+}
+
+def artifactExists() {
+	def path = project.artifactoryUrl + "/libs-release-local/" + group.replace(".", "/") + "/" + project.name + "/" + getArtifactVersion() + "/" + project.name + "-" + getArtifactVersion() + ".jar"
+	def url = new URL(path)
+	def authString = project.myLogin + ":" + project.myPassword;
+	String authStringEnc = Base64.getEncoder().encodeToString(authString.getBytes());
+	HttpURLConnection connection = url.openConnection();
+	connection.setRequestProperty("Authorization", "Basic " + authStringEnc);
+	connection.setRequestMethod("HEAD");
+	connection.connect()
+	def code = connection.getResponseCode()
+	return code < 400
+}
+
+def getRcNum() {
+	def num = 1
+	for(;;num++) {
+		def path = project.artifactoryUrl + "/libs-release-local/" + group.replace(".", "/") + "/" + project.name + "/" +
+			ver.major + "." + bump(ver.minor) + "-RC" + num + "/" + project.name + "-" +
+			ver.major + "." + bump(ver.minor) + "-RC" + num +
+			".jar"
+		def url = new URL(path)
+		def authString = project.myLogin + ":" + project.myPassword;
+		String authStringEnc = Base64.getEncoder().encodeToString(authString.getBytes());
+		HttpURLConnection connection = url.openConnection();
+		connection.setRequestProperty("Authorization", "Basic " + authStringEnc);
+		connection.setRequestMethod("HEAD");
+		connection.connect()
+		def code = connection.getResponseCode()
+		if(code == 404) break;
+	} 
+	return ver.major + "." + bump(ver.minor) + "-RC" + num
+}
+
+task publ {
+  doLast {
+	def branch = getBranch()
+	if(branch.startsWith("feature")) {
+		println "Are you sure you want to publish a feature branch?"
+	} else if(branch.startsWith("hotfix")) {
+		println "Are you sure you want to publish a hotfix branch?"
+	} else if(branch == "develop" || branch.startsWith("release")) {
+		doPublish()
+	} else {
+		// master ==> reject
+		if(branch == "master") {
+			if(!artifactExists()) doPublish();
+			else println("This artifact was published previously!")
+		}		
+	}
+  }
+}
