@@ -17,9 +17,6 @@ import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 
 import com.alee.laf.WebLookAndFeel;
 
-import net.sourceforge.napkinlaf.NapkinLookAndFeel;
-import nl.novadoc.utils.GUITheme;
-import nl.novadoc.utils.MaterialLookAndFeel;
 import nl.novadoc.utils.WrapperException;
 import nl.novadoc.utils.config.Config;
 import nl.novadoc.utils.config.ConsoleAppConfig;
