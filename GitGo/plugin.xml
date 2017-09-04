@@ -2,12 +2,13 @@
 <?eclipse version="3.4"?>
 <plugin>
 
+<extension point="org.eclipse.ui.commands">
+	<command defaultHandler="org.mcv.git.actions.GitGoAction" id="org.mcv.git.actions.GitGoAction" name="GitGo" />
+</extension>
+	
 <extension point="org.eclipse.ui.menus">
-  <menuContribution locationURI="popup:org.eclipse.ui.navigator.ProjectExplorer#PopupMenu?after=additions">
-    <dynamic
-              class="org.mcv.git.actions.GitGoAction"
-              id="org.mcv.git.actions">
-    </dynamic>
+  <menuContribution allPopups="false" locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+  	<command commandId="org.mcv.git.actions.GitGoAction" icon="res/cat16.png" label="GitGo" style="push" />
   </menuContribution>
 </extension>
 

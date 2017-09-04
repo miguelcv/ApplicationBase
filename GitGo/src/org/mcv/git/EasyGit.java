@@ -6,6 +6,8 @@ import java.util.Date;
 import java.util.List;
 
 import javax.swing.JOptionPane;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
 
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.viewers.LabelProvider;
@@ -13,6 +15,11 @@ import org.eclipse.jface.window.Window;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 
+import com.alee.laf.WebLookAndFeel;
+
+import net.sourceforge.napkinlaf.NapkinLookAndFeel;
+import nl.novadoc.utils.GUITheme;
+import nl.novadoc.utils.MaterialLookAndFeel;
 import nl.novadoc.utils.WrapperException;
 import nl.novadoc.utils.config.Config;
 import nl.novadoc.utils.config.ConsoleAppConfig;
@@ -63,6 +70,11 @@ public class EasyGit {
 	Shell shell;
 
 	public EasyGit() {
+		try {
+			UIManager.setLookAndFeel(new WebLookAndFeel());
+		} catch (UnsupportedLookAndFeelException e) {
+			// ignore
+		}
 	}
 
 	public EasyGit(Git git, Config cfg) {
@@ -164,10 +176,10 @@ public class EasyGit {
 			}
 			menu.add(START_FEATURE);
 		} else {
+			menu.add(FINISH);
 			if (!exists) {
 				menu.add(PUBLISH);
 			}
-			menu.add(FINISH);
 		}
 		if(clean) stage = CLEAR;
 	}
@@ -326,6 +338,7 @@ public class EasyGit {
 	void undo() {
 		try {
 			git.reset("hard");
+			stage = LOCAL;
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
@@ -338,6 +351,7 @@ public class EasyGit {
 			git.createBranch(HOTFIX + SEP + name);
 			currentBranch = getBranch();
 			git.stashApply();
+			stage = LOCAL;
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
@@ -391,6 +405,7 @@ public class EasyGit {
 		try {
 			git.createBranch(HOTFIX + SEP + name);
 			currentBranch = getBranch();
+			stage = LOCAL;
 		} catch (Exception e) {
 			// branch already exists?
 			doCommand(START_HOTFIX);
@@ -401,6 +416,7 @@ public class EasyGit {
 		try {
 			git.createBranch(RELEASE + SEP + name);
 			currentBranch = getBranch();
+			stage = LOCAL;
 		} catch (Exception e) {
 			// branch already exists?
 			doCommand(START_RELEASE);
@@ -411,6 +427,7 @@ public class EasyGit {
 		try {
 			git.createBranch(FEATURE + SEP + name);
 			currentBranch = getBranch();
+			stage = LOCAL;
 		} catch (Exception e) {
 			// branch already exists?
 			doCommand(START_FEATURE);
@@ -421,6 +438,7 @@ public class EasyGit {
 		try {
 			// push branch to origin
 			git.push(getBranch());
+			stage = LOCAL;
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
@@ -457,6 +475,7 @@ public class EasyGit {
 				// push all (i.e. develop)
 				pushAll();
 			}
+			stage = LOCAL;
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
