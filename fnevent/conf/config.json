@@ -1,0 +1,9 @@
+{
+	"General": {
+		"logPath": "$:/Programs/Events/logs/",
+		"logLevel": "DEBUG"
+	}
+	"@MyEventHandler": {
+		"key": "value"
+	} 
+}
