@@ -1,0 +1,37 @@
+
+qsquid:HiddenFieldCheckÀ"8Rename "name" which hides the field declared at line 49.(³ÜÃHèRMAJORZ
+CODE_SMELL
+ksquid:S1155Ó">Use isEmpty() to check whether the collection is empty or not.(ü¤ŠVHéRMINORZ
+CODE_SMELL
+e
+squid:S106¶"9Replace this use of System.out or System.err by a logger.(‚š‰1HêRMAJORZ
+CODE_SMELL
+Vsquid:S3010t")Remove this assignment of "logToConsole".(¼§ÎäHëRMAJORZ
+CODE_SMELL
+Ysquid:S1172Å"+Remove this unused method parameter "name".(«àñ’HìRMAJORZ
+CODE_SMELL
+hsquid:S1141ø"5Extract this nested try block into a separate method.(¡»¢üùÿÿÿÿHíRMAJORZ
+CODE_SMELL
+f
+squid:S106¼"9Replace this use of System.out or System.err by a logger.(Æê¯HîRMAJORZ
+CODE_SMELL
+Tsquid:S1604H"(Make this anonymous inner class a lambda(£çñ9HïRMAJORZ
+CODE_SMELL
+f
+squid:S106º"9Replace this use of System.out or System.err by a logger.(¦Ÿ½ûHğRMAJORZ
+CODE_SMELL
+psquid:S2259æ"D"NullPointerException" will be thrown when invoking method "copy()".(ìœñŒşÿÿÿÿHñRMAJORZBUG
+Wsquid:S1172Á"*Remove this unused method parameter "obj".(„„Ñ1HòRMAJORZ
+CODE_SMELL
+wsquid:S2095¥"IUse try-with-resources or close this "PrintStream" in a "finally" clause.(üè€èûÿÿÿÿHóRBLOCKERZBUG
+f
+squid:S106ñ"9Replace this use of System.out or System.err by a logger.(™Æ«×HôRMAJORZ
+CODE_SMELL
+\squid:S1066j"/Merge this if statement with the enclosing one.(ª„…ÎHõRMAJORZ
+CODE_SMELL
+Osquid:S3010X"#Remove this assignment of "mapper".(¼œË`HöRMAJORZ
+CODE_SMELL
+†squid:S1192ä"UDefine a constant instead of duplicating this literal "Version %d not found" 3 times.(•ş·—H÷RCRITICALZ
+CODE_SMELL
+Wsquid:S1452Å"&Remove usage of generic wildcard type.(«àñ’HøRCRITICALZ
+CODE_SMELL

@@ -47,12 +47,16 @@ def getMasterVersion() {
 	return ver.major + "." + ver.minor + "." + ver.patch
 }
 
+def bump(s) {
+	return Integer.valueOf(s)+1
+}
+
 def getMasterNextPatch() {
-	return ver.major + "." + ver.minor + "." + (Integer.valueOf(ver.patch)+1)
+	return ver.major + "." + ver.minor + "." + bump(ver.patch)
 }
 
 def getDevelVersion() {
-	return ver.major + "." + (Integer.valueOf(ver.minor)+1)
+	return ver.major + "." + bump(ver.minor)
 }
 
 def getArtifactVersion(branch) {
@@ -60,9 +64,9 @@ def getArtifactVersion(branch) {
 	if(branch == "master")
 		return ver.major + "." + ver.minor + "." + ver.patch
 	if(branch == "develop")
-		return ver.major + "." + ver.minor + "-SNAPSHOT"
+		return ver.major + "." + bump(ver.minor) + "-SNAPSHOT"
 	if(branch.startsWith("release")) {
-		return ver.major + "." + ver.minor + "-RC"
+		return getRcNum()
 	}
 }
 
@@ -294,7 +298,7 @@ def isMaster() {
 			standardOutput = os
 		}
 		def out = os.toString()
-		ret = out.indexOf("* master") >= 0;
+		ret = out.indexOf("* master") >= 0 || out.indexOf("* release") >= 0;
 	}
 	println ret
 	return ret;
@@ -405,7 +409,48 @@ assemble.doLast {
 	println("Artifact-version: " + getArtifactVersion())
 }
 
+def doPublish() {
+	project.exec {
+		executable = 'cmd'
+		args = ["/k", "gradle", "publish"]
+	}
+}
+
+def artifactExists() {
+	def path = project.artifactoryUrl + "/libs-release-local/" + group.replace(".", "/") + "/" + project.name + "/" + getArtifactVersion() + "/" + project.name + "-" + getArtifactVersion() + ".jar"
+	def url = new URL(path)
+	def authString = project.myLogin + ":" + project.myPassword;
+	String authStringEnc = Base64.getEncoder().encodeToString(authString.getBytes());
+	HttpURLConnection connection = url.openConnection();
+	connection.setRequestProperty("Authorization", "Basic " + authStringEnc);
+	connection.setRequestMethod("HEAD");
+	connection.connect()
+	def code = connection.getResponseCode()
+	return code < 400
+}
+
+def getRcNum() {
+	def num = 1
+	for(;;num++) {
+		def path = project.artifactoryUrl + "/libs-release-local/" + group.replace(".", "/") + "/" + project.name + "/" +
+			ver.major + "." + bump(ver.minor) + "-RC" + num + "/" + project.name + "-" +
+			ver.major + "." + bump(ver.minor) + "-RC" + num +
+			".jar"
+		def url = new URL(path)
+		def authString = project.myLogin + ":" + project.myPassword;
+		String authStringEnc = Base64.getEncoder().encodeToString(authString.getBytes());
+		HttpURLConnection connection = url.openConnection();
+		connection.setRequestProperty("Authorization", "Basic " + authStringEnc);
+		connection.setRequestMethod("HEAD");
+		connection.connect()
+		def code = connection.getResponseCode()
+		if(code == 404) break;
+	} 
+	return ver.major + "." + bump(ver.minor) + "-RC" + num
+}
+
 task publ {
+<<<<<<< HEAD
 	doLast {
 		def branch = getBranch()
 		println(branch)
@@ -420,5 +465,22 @@ task publ {
 				args = ["gradle.bat", "publish"]
 			}
 		}
+=======
+  doLast {
+	def branch = getBranch()
+	if(branch.startsWith("feature")) {
+		println "Do not publish feature branches"
+	} else if(branch.startsWith("hotfix")) {
+		println "Do not publish hotfix branches"
+	} else if(branch == "develop" || branch.startsWith("release")) {
+		doPublish()
+	} else {
+		// master ==> reject
+		if(branch == "master") {
+			if(!artifactExists()) doPublish();
+			else println("This artifact was published previously!")
+		}		
+>>>>>>> master
 	}
+  }
 }

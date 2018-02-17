@@ -1,0 +1,9 @@
+
+Rsquid:S1068
+"'Remove this unused "cfg" private field.(«ß³bH5RMAJORZ
+CODE_SMELL
+}squid:S1450
+"RRemove the "cfg" field and declare it as a local variable in the relevant methods.(«ß³bH6RMINORZ
+CODE_SMELL
+bsquid:S1135"2Complete the task associated to this TODO comment.(» æžÿÿÿÿÿH7RINFOZ
+CODE_SMELL

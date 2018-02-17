@@ -1,0 +1,26 @@
+/**
+ * Default executable JAR
+ */
+group = 'nl.novadoc.tools'
+
+project.ext {
+	layout="eclipse"
+	javaVersion="1.8"
+	useUtils=true
+	useLogging=true
+	useLog4j=false
+	executable=true
+	fatJar=false
+	srcJar=false
+	encryptConf=false
+	windowsExe=false
+    main = "${project.group}.Main"
+}
+
+apply from: "${project.localPluginsUrl}/default.gradle"
+
+dependencies {
+}
+
+apply from: "${project.localPluginsUrl}/jar.gradle"
+
