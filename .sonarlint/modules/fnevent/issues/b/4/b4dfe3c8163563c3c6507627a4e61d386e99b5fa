@@ -1,0 +1,7 @@
+
+Vsquid:S1181"%Catch Exception instead of Throwable.(‡ΪΪψÿÿÿÿH3RMAJORZ
+CODE_SMELL
+xsquid:S00112"FDefine and throw a dedicated exception instead of using a generic one.(Ò‚ÒιόÿÿÿÿH2RMAJORZ
+CODE_SMELL
+Θ%squid:RedundantThrowsDeclarationCheck"{Remove the declaration of thrown exception 'com.filenet.api.exception.EngineRuntimeException' which is a runtime exception.(Ί¨σ8Β†‹ώ—,H4RMINORZ
+CODE_SMELL

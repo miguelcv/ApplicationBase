@@ -1,0 +1,13 @@
+Manifest-Version: 1.0
+Class-Path: . conf/ lib/ClassEnumerator-1.4.jar lib/novautils-light-1.
+ 23.jar lib/logback-classic-1.2.3.jar lib/slf4j-api-1.7.25.jar lib/log
+ back-core-1.2.3.jar
+Main-Class: nl.novadoc.tools.Main
+Implementation-Title: hhh
+Implementation-Version: unspecified
+Implementation-Build: 0
+Built-By: Miguelc
+Build-Date: Sat Feb 10 12:30:07 CET 2018
+Build-JDK: 9.0.4
+Build-Gradle: 4.5
+

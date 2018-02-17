@@ -1,0 +1,30 @@
+/**
+ * FileNet EventAction 
+ */
+
+group = 'nl.novadoc.events'
+
+project.ext {
+	layout="eclipse"
+	javaVersion="1.8"
+	useUtils=true
+	useLogging=false
+	useLog4j=false
+	executable=false
+	fatJar=true
+	srcJar=true
+	fnVersion = '5.2'
+	encryptConf=true
+}
+
+apply from: "${project.localPluginsUrl}/default.gradle"
+
+dependencies {
+    compile libs.ceUtils
+	compileOnly libs.jace
+    compile libs.jackson
+    compile libs.crypt
+    compileOnly libs.log4j
+}
+
+apply from: "${project.localPluginsUrl}/jar.gradle"

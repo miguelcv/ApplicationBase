@@ -1,0 +1,37 @@
+
+Ysquid:S1172≈"+Remove this unused method parameter "name".(´‡ÒíH◊RMAJORZ
+CODE_SMELL
+hsquid:S1141¯"5Extract this nested try block into a separate method.(°ª¢¸˘ˇˇˇˇHÿRMAJORZ
+CODE_SMELL
+e
+squid:S106∂"9Replace this use of System.out or System.err by a logger.(Çöâ1HŸRMAJORZ
+CODE_SMELL
+\squid:S1066j"/Merge this if statement with the enclosing one.(™ÑÖŒH⁄RMAJORZ
+CODE_SMELL
+wsquid:S2095•"IUse try-with-resources or close this "PrintStream" in a "finally" clause.(¸ËÄË˚ˇˇˇˇH€RBLOCKERZBUG
+Tsquid:S1604H"(Make this anonymous inner class a lambda(£ÁÒ9H‹RMAJORZ
+CODE_SMELL
+Üsquid:S1192‰"UDefine a constant instead of duplicating this literal "Version %d not found" 3 times.(ï˛∑óH›RCRITICALZ
+CODE_SMELL
+Osquid:S3010X"#Remove this assignment of "mapper".(ºúÀ`HﬁRMAJORZ
+CODE_SMELL
+f
+squid:S106∫"9Replace this use of System.out or System.err by a logger.(¶üΩ˚HﬂRMAJORZ
+CODE_SMELL
+f
+squid:S106Ò"9Replace this use of System.out or System.err by a logger.(ô∆´◊H‡RMAJORZ
+CODE_SMELL
+qsquid:HiddenFieldCheck¿"8Rename "name" which hides the field declared at line 49.(≥‹√éH·RMAJORZ
+CODE_SMELL
+psquid:S2259Ê"D"NullPointerException" will be thrown when invoking method "copy()".(ÏúÒå˛ˇˇˇˇH‚RMAJORZBUG
+ksquid:S1155”">Use isEmpty() to check whether the collection is empty or not.(¸§äVH„RMINORZ
+CODE_SMELL
+f
+squid:S106º"9Replace this use of System.out or System.err by a logger.(∆çÍØH‰RMAJORZ
+CODE_SMELL
+Wsquid:S1172¡"*Remove this unused method parameter "obj".(ÑÑ—1HÂRMAJORZ
+CODE_SMELL
+Wsquid:S1452≈"&Remove usage of generic wildcard type.(´‡ÒíHÊRCRITICALZ
+CODE_SMELL
+Vsquid:S3010t")Remove this assignment of "logToConsole".(ºßŒ‰HÁRMAJORZ
+CODE_SMELL

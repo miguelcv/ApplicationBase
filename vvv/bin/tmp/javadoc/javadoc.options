@@ -1,0 +1,8 @@
+-Xdoclint:none '-quiet'
+-classpath 'C:\\Users\\miguelc\\.gradle\\caches\\modules-2\\files-2.1\\nl.novadoc.utils\\ClassEnumerator\\1.4\\4f8810fd57337d4e6af13dce94b074758c20bb35\\ClassEnumerator-1.4.jar;C:\\Users\\miguelc\\.gradle\\caches\\modules-2\\files-2.1\\nl.novadoc.utils\\novautils-light\\1.23\\50dccf7fe4d9ff6f346d42cab45c5198715b31d3\\novautils-light-1.23.jar;C:\\Users\\miguelc\\.gradle\\caches\\modules-2\\files-2.1\\ch.qos.logback\\logback-classic\\1.2.3\\7c4f3c474fb2c041d8028740440937705ebb473a\\logback-classic-1.2.3.jar;C:\\Users\\miguelc\\.gradle\\caches\\modules-2\\files-2.1\\org.slf4j\\slf4j-api\\1.7.25\\da76ca59f6a57ee3102f8f9bd9cee742973efa8a\\slf4j-api-1.7.25.jar;C:\\Users\\miguelc\\.gradle\\caches\\modules-2\\files-2.1\\org.projectlombok\\lombok\\1.16.20\\ac76d9b956045631d1561a09289cbf472e077c01\\lombok-1.16.20.jar;C:\\Users\\miguelc\\.gradle\\caches\\modules-2\\files-2.1\\ch.qos.logback\\logback-core\\1.2.3\\864344400c3d4d92dfeb0a305dc87d953677c03c\\logback-core-1.2.3.jar'
+-d 'C:\\Users\\miguelc\\github\\runtime-EclipseApplication\\vvv\\bin\\docs\\javadoc'
+-doctitle 'vvv 1.0 API'
+-encoding 'UTF-8'
+-quiet 
+-windowtitle 'vvv 1.0 API'
+'C:\\Users\\miguelc\\github\\runtime-EclipseApplication\\vvv\\src\\nl\\novadoc\\tools\\Main.java'
