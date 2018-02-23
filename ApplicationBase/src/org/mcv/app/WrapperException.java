@@ -8,11 +8,22 @@ public class WrapperException extends RuntimeException {
 	}
 
 	public static Throwable unwrap(Throwable e) {
-		if(e == null) return new Exception("null");
+		if(e == null) return new NullPointerException();
 		Throwable ret = e;
 		while(ret instanceof WrapperException) {
 			ret = ret.getCause();
 		}
 		return ret;
 	}
+	
+	@Override
+	public String getMessage() {
+		return unwrap(this).getMessage();
+	}
+
+	@Override
+	public StackTraceElement[] getStackTrace() {
+		return unwrap(this).getStackTrace();
+	}
+
 }

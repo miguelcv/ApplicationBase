@@ -99,7 +99,7 @@ public class Application {
 		db.createLogsTable();
 
 		String logLoc = props.getProperty("app.logLocation");
-		log.info("Log location = " + logLoc);
+		//log.info("Log location = " + logLoc);
 		if (logLoc != null) {
 			logLocation = new File(logLoc);
 			if (!logLocation.exists()) {
@@ -110,7 +110,7 @@ public class Application {
 
 			String level = props.getProperty("app.logLevel", "DEBUG");
 			logLevel = Kind.valueOf(level);
-			log.info("Log level = " + level);
+			//log.info("Log level = " + level);
 		}
 		
 		logToConsole = props.getProperty("app.logToConsole", "true").equals("true");
@@ -303,7 +303,9 @@ public class Application {
 		try {
 			if (obj == null)
 				return "null";
-			return mapper.writeValueAsString(obj);
+			String s = mapper.writeValueAsString(obj);
+			if(s.equals("[[]]")) s = "[]";
+			return s;
 		} catch (Exception e) {
 			staticLog.warn(e, "Error serializing %s to JSON",
 					String.valueOf(obj));
