@@ -17,6 +17,7 @@ public class Git {
 	public static Git open(File gitDir) {
 		Git git = new Git();
 		git.gitDir = gitDir;
+		git.status();
 		return git;
 	}
 

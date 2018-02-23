@@ -60,7 +60,7 @@ public class EasyGit {
 	String currentBranch;
 	boolean clean;
 	int stage = LOCAL;
-	List<String> menu = new ArrayList<>();
+	List<String> menu = new ArrayList<String>();
 	boolean interactive = true;
 	Object cannedResponse;
 	Date lastFetch = new Date(0);
@@ -183,23 +183,32 @@ public class EasyGit {
 
 	public Git init() {
 		try {
-			File parentDir = new File(cfg.getString(GITDIR, CWD));
+			File parentDir = new File(cfg.getString(GITDIR, CWD)).getCanonicalFile();
 			if (!parentDir.exists()) {
 				throw new GitException("Directory " + parentDir + " does not exist");
 			}
-			File gitDir = new File(parentDir.getCanonicalPath(), DOT_GIT);
+			File gitDir = new File(parentDir, DOT_GIT);
 			while (!gitDir.exists()) {
 				gitDir = new File(gitDir.getParentFile().getParentFile().getCanonicalPath(), DOT_GIT);
 			}
 
 			git = Git.open(gitDir.getParentFile());
+			
 			if (!listLocalBranches().contains(MASTER)) {
 				throw new GitException("Repository does not have a MASTER branch");
 			}
 			if (!listLocalBranches().contains(DEVELOP)) {
 				throw new GitException("Repository does not have a DEVELOP branch");
 			}
+			if (!git.branchAllList().contains(ORIGIN + SEP + MASTER)) {
+				throw new GitException("Repository does not have a remote MASTER branch");
+			}
+			if (!git.branchAllList().contains(ORIGIN + SEP + DEVELOP)) {
+				throw new GitException("Repository does not have a remote DEVELOP branch");
+			}
+			
 			return git;
+			
 		} catch (Exception e) {
 			throw new WrapperException(e);
 		}
