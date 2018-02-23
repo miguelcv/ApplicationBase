@@ -36,7 +36,7 @@ public class SetterAdvice implements ProxyAdvice {
 
 		// GET OLD VALUE
 		Object oldValue = getOldValue(base, info);
-		base.debug("oldvalue = " + oldValue);
+		//base.debug("oldvalue = " + oldValue);
 		// LOGGING
 		log(base, info, oldValue);
 
@@ -65,7 +65,7 @@ public class SetterAdvice implements ProxyAdvice {
 		log.setMethodClass(SteUtils.cleanup(callee.getClassName()));
 		log.setMethodLine(callee.getLineNumber());
 		Object newValue = info.arguments[0];
-		base.debug("newvalue = " + newValue);
+		//base.debug("newvalue = " + newValue);
 		List<Object> list = new ArrayList<>();
 		list.add(oldValue);
 		list.add(newValue);

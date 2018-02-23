@@ -61,13 +61,11 @@ public class Base {
 					props.getProperty("app.logLevel", "DEBUG")));
 			logLevel = Kind.valueOf(level);
 			
-			info("Log location = " + logLoc);
 			if (!logLocation.exists()) {
 				if(!logLocation.getName().endsWith(".log")) {
 					logLocation.mkdirs();
 				}
 			}
-			info("Log level = " + level);
 		} catch (Exception e) {
 			System.out.println("Could not load config.props: " + e);
 		}
