@@ -28,12 +28,15 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 public class Base {
 
 	// ID fields
-	String name;
-	Class<? extends Base> clazz;
+	protected String name;
+	protected String className;
+	protected String classFullName;
+	protected String classPath;
+	@JsonIgnore
+	protected boolean logToConsole = true;
 
 	// package private
 	Base() {
-		
 	}
 	
 	/**
@@ -42,53 +45,53 @@ public class Base {
 	 * @param name
 	 * @param clazz
 	 */
-	public Base(String name, Class<? extends Base> clazz) {
+	public Base(String name) {
 		this.name = name;
-		this.clazz = clazz;
+		this.className = name(getClass().getSimpleName());
+		this.classFullName = name(getClass().getName());
+		this.classPath = getClasspath(getClass());
+
 		try {
 			Properties props = new Properties();
 			@Cleanup
 			InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.props");
 			props.load(is);
-			String logLoc = props.getProperty(clazz.getCanonicalName() + "."
-					+ name + ".logLocation", props.getProperty(
-					clazz.getCanonicalName() + ".logLocation",
+			String logLoc = props.getProperty(classFullName + "."
+					+ name + ".logLocation", props.getProperty(classFullName + ".logLocation",
 					props.getProperty("app.logLocation")));
 			logLocation = new File(logLoc);
-			String level = props.getProperty(clazz.getCanonicalName() + "."
-					+ name + ".logLevel", props.getProperty(
-					clazz.getCanonicalName() + ".logLevel",
+			String level = props.getProperty(classFullName + "."
+					+ name + ".logLevel", props.getProperty(classFullName + ".logLevel",
 					props.getProperty("app.logLevel", "DEBUG")));
 			logLevel = Kind.valueOf(level);
+			logToConsole = props.getProperty("app.logToConsole", "true").equals("true");
 			
-			if (!logLocation.exists()) {
-				if(!logLocation.getName().endsWith(".log")) {
-					logLocation.mkdirs();
-				}
+			if (!logLocation.exists() && !logLocation.getName().endsWith(".log")) {
+				logLocation.mkdirs();
 			}
 		} catch (Exception e) {
-			System.out.println("Could not load config.props: " + e);
+			Application.print("Could not load config.props: " + e);
 		}
 	}
 
-	long version;
-	long parent;
-	List<Long> children;
-	LocalDateTime created;
-	boolean current;
-	boolean deleted;
+	protected long version;
+	protected long parent;
+	protected List<Long> children;
+	protected LocalDateTime created;
+	protected boolean current;
+	protected boolean deleted;
 
 	@JsonIgnore
-	boolean inBatch;
+	protected boolean inBatch;
 	@JsonIgnore
-	String json;
+	protected String json;
 	@JsonIgnore
-	Application app;
+	protected Application app;
 	@JsonIgnore
 	@Setter
-	File logLocation;
+	protected File logLocation;
 	@JsonIgnore
-	Kind logLevel;
+	protected Kind logLevel;
 
 	public void setLogLevel(Kind kind) {
 		logLevel = kind;
@@ -216,20 +219,19 @@ public class Base {
 	 * @return logs
 	 */
 	public List<LogEntry> getLogs() {
-		return app.getLogs(name, clazz.getCanonicalName());
+		return app.getLogs(name, classFullName);
 	}
 
 	@Ignore
-	void log(LogEntry entry) {
+	public void log(LogEntry entry) {
 		if (app != null) {
 			app.storeLogEntry(entry);
 		}
 		if (logLocation != null && filter(entry)) {
 			if (logLocation.isDirectory()) {
-				Application.writeLog(new File(logLocation, clazz.getCanonicalName()
-						+ "." + name + ".log"), entry);
+				Application.writeLog(new File(logLocation, className + "." + name + ".log"), entry, logToConsole);
 			} else {
-				Application.writeLog(logLocation, entry);
+				Application.writeLog(logLocation, entry, logToConsole);
 			}
 		}
 	}
@@ -259,7 +261,7 @@ public class Base {
 	}
 
 	@Ignore
-	void log(Kind kind, String message, List<Object> objList) {
+	public void log(Kind kind, String message, List<Object> objList) {
 		
 		StackTraceElement[] elts = Thread.currentThread().getStackTrace();
 		int[] indices = SteUtils.findCalleeAndCaller(elts);
@@ -272,7 +274,7 @@ public class Base {
 		entry.setCallerClass(SteUtils.cleanup(caller.getClassName()));
 		entry.setCallerLine(caller.getLineNumber());
 		
-		entry.setClazz(clazz.getCanonicalName());
+		entry.setClazz(classFullName);
 		
 		entry.setMethod(SteUtils.cleanup(callee.getMethodName()));
 		entry.setMethodClass(SteUtils.cleanup(callee.getClassName()));
@@ -351,9 +353,9 @@ public class Base {
 		if(e == null) {
 			msg = "message: " + message;
 		} else if(message == null || message.length() == 0) {
-			msg = "exception: " + e.toString();
+			msg = "exception: " + e.toString() + ": " + e.getMessage();
 		} else {
-			msg = "exception: " + e.toString() + "\r\n\tmessage: " + message;
+			msg = "exception: " + e.toString() + ": " + e.getMessage() + "\r\n\tmessage: " + message;
 		}
 		return msg;
 	}
@@ -379,4 +381,25 @@ public class Base {
 		return retval;
 	}
 
+	/* */
+	public static String getClasspath(Base base) {
+		return getClasspath(base.getClass());
+	}
+
+	public static String getClasspath(Class<? extends Base> clazz) {
+		StringBuilder sb = new StringBuilder();
+		sb.append(name(clazz.getSimpleName()));
+		for(Class<?> superClass = clazz.getSuperclass(); !superClass.equals(Object.class); superClass = superClass.getSuperclass()) {
+			sb.insert(0, name(superClass.getSimpleName()) + ":");
+		}
+		return sb.toString();
+	}
+
+	static String name(String name) {
+		int ix = name.indexOf("$$Proxetta");
+		if(ix >= 0)
+			return name.substring(0, ix);
+		return name;
+	}
+	
 }

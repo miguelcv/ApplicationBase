@@ -36,7 +36,6 @@ public class SetterAdvice implements ProxyAdvice {
 
 		// GET OLD VALUE
 		Object oldValue = getOldValue(base, info);
-		//base.debug("oldvalue = " + oldValue);
 		// LOGGING
 		log(base, info, oldValue);
 
@@ -65,7 +64,6 @@ public class SetterAdvice implements ProxyAdvice {
 		log.setMethodClass(SteUtils.cleanup(callee.getClassName()));
 		log.setMethodLine(callee.getLineNumber());
 		Object newValue = info.arguments[0];
-		//base.debug("newvalue = " + newValue);
 		List<Object> list = new ArrayList<>();
 		list.add(oldValue);
 		list.add(newValue);
@@ -73,7 +71,7 @@ public class SetterAdvice implements ProxyAdvice {
 		log.setThread(Thread.currentThread().getName());
 		log.setTimestamp(LocalDateTime.now());
 		log.setName(base.getName());
-		log.setClazz(base.getClazz().getCanonicalName());
+		log.setClazz(base.getClass().getName());
 		base.log(log);
 	}
 
@@ -89,7 +87,7 @@ public class SetterAdvice implements ProxyAdvice {
 			}
 			return getterMethod.invoke(base);
 		} catch (Exception e) {
-			return null;
+			return "";
 		}
 	}
 }

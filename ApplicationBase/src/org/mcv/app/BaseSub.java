@@ -17,8 +17,8 @@ public class BaseSub extends Base {
 	String msg;
 	Date date;
 
-	public BaseSub(String name, Class<? extends Base> clazz) {
-		super(name, clazz);
+	public BaseSub(String name) {
+		super(name);
 		i = 10;
 		z = 9;
 		d = 9.9;

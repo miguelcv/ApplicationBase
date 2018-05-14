@@ -1,5 +1,7 @@
 package org.mcv.app;
 
+import lombok.NonNull;
+
 public class WrapperException extends RuntimeException {
 	private static final long serialVersionUID = 862482220065138139L;
 	
@@ -7,10 +9,13 @@ public class WrapperException extends RuntimeException {
 		super(e);
 	}
 
-	public static Throwable unwrap(Throwable e) {
-		if(e == null) return new NullPointerException();
+	public static @NonNull Throwable unwrap(Throwable e) {
+		if(e == null) throw new NullPointerException();
 		Throwable ret = e;
 		while(ret instanceof WrapperException) {
+			if(ret.getCause() == null) {
+				return ret;
+			}
 			ret = ret.getCause();
 		}
 		return ret;

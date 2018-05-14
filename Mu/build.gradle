@@ -1,0 +1,28 @@
+/**
+ * Default executable JAR
+ */
+group = 'org.mcv.mu'
+
+project.ext {
+	layout="eclipse"
+	javaVersion="9"
+	useUtils=true
+	useLogging=true
+	useLog4j=false
+	executable=true
+	fatJar=false
+	srcJar=false
+	encryptConf=false
+	windowsExe=false
+    main = "${project.group}.Mu"
+}
+
+apply from: "${project.localPluginsUrl}/default.gradle"
+
+dependencies {
+	compile libs.jsoup
+	compile "com.github.tomtung:latex2unicode_2.12:0.2.4"
+}
+
+apply from: "${project.localPluginsUrl}/jar.gradle"
+

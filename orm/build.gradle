@@ -1,0 +1,27 @@
+/**
+ * Default executable JAR
+ */
+group = 'org.mcv.orm'
+
+project.ext {
+	layout="eclipse"
+	javaVersion="1.8"
+	useUtils=true
+	useLogging=true
+	useLog4j=false
+	executable=true
+	fatJar=false
+	srcJar=true
+	encryptConf=false
+	windowsExe=false
+    main = "${project.group}.Main"
+}
+
+apply from: "${project.localPluginsUrl}/default.gradle"
+
+dependencies {
+	compile snapshot("org.mcv.app:ApplicationBase:1.0")
+}
+
+apply from: "${project.localPluginsUrl}/jar.gradle"
+

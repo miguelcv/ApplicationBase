@@ -2,6 +2,10 @@ package org.mcv.app;
 
 public class SteUtils {
 	
+	private SteUtils() {
+		// do not instantiate me
+	}
+	
 	public static String cleanup(String s) {
 		int index = s.indexOf('$');
 		if(index > 0) return s.substring(0, index);
@@ -10,7 +14,8 @@ public class SteUtils {
 	}
 
 	public static int[] findCalleeAndCaller(StackTraceElement[] elts) {
-		int callee = 0, caller = 0;
+		int callee = 0;
+		int caller = 0;
 		String calleeName = null;
 		for(int i=3; i < elts.length; i++) {
 			if(calleeName == null) {

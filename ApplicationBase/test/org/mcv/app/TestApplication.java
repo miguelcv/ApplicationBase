@@ -262,12 +262,13 @@ public class TestApplication {
 		try {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create("base", BaseSub.class);
+			base.inBatch = false;
 			assertTrue(base.getVersion() == 1);
 			base.setMsg("Changed");
 			assertTrue(base.getVersion() == 2);
 			base.store();
 			// no effect
-			assertTrue(base.getVersion() == 2);
+			assertTrue(""+base.getVersion(), base.getVersion() == 2);
 		} catch (Exception e) {
 			Throwable t = WrapperException.unwrap(e);
 			log.error(t.toString(), t);
@@ -461,7 +462,7 @@ public class TestApplication {
 			assertTrue(app.getDb() != null);
 			BaseSub base = app.create();
 			assertEquals("base", base.getName());
-			assertEquals(BaseSub.class, base.getClazz());
+			assertEquals(BaseSub.class.getName(), base.getClassFullName());
 		} catch (Exception e) {
 			Throwable t = WrapperException.unwrap(e);
 			log.error(t.toString(), t);
