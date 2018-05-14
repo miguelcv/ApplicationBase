@@ -1,19 +1,34 @@
 package org.mcv.mu;
 
 import java.util.ArrayList;
+import java.util.List;
 
 abstract class Expr {
 
 	String type = "None";
 	
 	interface Visitor<R> {
+		/* decl */
+		R visitModuleExpr(Module expr);
+		R visitClassExpr(ClassDef expr);
+		R visitVarExpr(Var expr);
+		R visitValExpr(Val expr);
+		/* print */
+		R visitPrintExpr(Print expr);
+		/* ctrl */
+		R visitForExpr(For expr);
+		R visitWhileExpr(While expr);
+		R visitBreakExpr(Break expr);
+		R visitContinueExpr(Continue expr);
+		R visitReturnExpr(Return expr);
+		/* expr */
 		R visitAssignExpr(Assign expr);
 		R visitBinaryExpr(Binary expr);
 		R visitFunctionExpr(Function expr);
 		R visitCallExpr(Call expr);
 		R visitIfExpr(If expr);
 		R visitThisExpr(This expr);
-		R visitGetExpr(Getter expr);
+		R visitGetterExpr(Getter expr);
 		R visitSetterExpr(Setter expr);
 		R visitBlockExpr(Block expr);
 		R visitLiteralExpr(Literal expr);
@@ -21,39 +36,195 @@ abstract class Expr {
 		R visitUnaryExpr(Unary expr);
 		R visitPostfixExpr(Postfix expr);
 		R visitVariableExpr(Variable expr);
-		R visitListExpr(List expr);
+		R visitSeqExpr(Seq expr);
 		R visitSetExpr(Set expr);
 		R visitRangeExpr(Range expr);
 		R visitMappingExpr(Mapping expr);
 		R visitMapExpr(Map expr);
 		R visitTypeExpr(Type expr);
 	}
-
+	
 	// Nested Expr classes here...
 
-	static class List extends Expr {
-		List(java.util.List<Expr> exprs) {
+	static class Module extends Expr {
+		Module(Token name) {
+			this.type = "Type";
+			this.name = name;
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitModuleExpr(this);
+		}
+
+		final Token name;
+	}
+
+	static class ClassDef extends Expr {
+		ClassDef(Token name, Expr.Variable superclass, List<Expr.Function> methods, List<Function> classMethods) {
+			this.type = "Type";
+			this.name = name;
+			this.superclass = superclass;
+			this.methods = methods;
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitClassExpr(this);
+		}
+
+		final Token name;
+		final Expr.Variable superclass;
+		final List<Expr.Function> methods;
+	}
+
+	static class Function extends Expr {
+		Function(java.util.List<Token> parameters, java.util.List<Expr> body, String type) {
+			this.parameters = parameters;
+			this.body = body;
+			this.type = type;
+	    }
+	    <R> R accept(Visitor<R> visitor) {
+	    	return visitor.visitFunctionExpr(this);
+	    }
+	    final java.util.List<Token> parameters;
+	    final java.util.List<Expr> body;
+	}
+
+	static class Print extends Expr {
+		Print(Expr expression) {
+			this.expression = expression;
+			type = "Void";
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitPrintExpr(this);
+		}
+
+		final Expr expression;
+	}
+
+	static class Return extends Expr {
+		Return(Token keyword, Expr value) {
+			this.keyword = keyword;
+			this.value = value;
+			type = value.type;
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitReturnExpr(this);
+		}
+
+		final Token keyword;
+		final Expr value;
+	}
+
+	static class Var extends Expr {
+		Var(Token name, Expr initializer) {
+			this.name = name;
+			this.initializer = initializer;
+			if(initializer != null) type = initializer.type;
+			else type = "Any";
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitVarExpr(this);
+		}
+
+		final Token name;
+		final Expr initializer;
+	}
+
+	static class Val extends Expr {
+		Val(Token name, Expr initializer) {
+			this.name = name;
+			this.initializer = initializer;
+			type = initializer.type;
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitValExpr(this);
+		}
+
+		final Token name;
+		final Expr initializer;
+	}
+
+	static class While extends Expr {
+		While(Expr condition, Expr body) {
+			this.condition = condition;
+			this.body = body;
+			type = "Void";
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitWhileExpr(this);
+		}
+
+		final Expr condition;
+		final Expr body;
+	}
+
+	static class For extends Expr {
+		For(Expr.Var var, Range range, Block body) {
+			this.var = var;
+			this.range = range;
+			this.body = body;
+			type = "Void";
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitForExpr(this);
+		}
+
+		final Var var;
+		final Range range;
+		final Block body;
+	}
+
+	static class Break extends Expr {
+		Break() {
+			type = "Void";
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitBreakExpr(this);
+		}
+
+	}
+
+	static class Continue extends Expr {
+		Continue() {
+			type = "Void";
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitContinueExpr(this);
+		}
+
+	}
+
+	static class Seq extends Expr {
+		Seq(List<Expr> exprs) {
 			this.exprs = exprs;
 			type = "List";
 			eltType = exprs.isEmpty() ? "Any" : exprs.get(0).type;
 		}
 		
-		java.util.List<Expr> exprs;
+		List<Expr> exprs;
 		final String eltType;
 		
 		@Override
 		<R> R accept(Visitor<R> visitor) {
-			return visitor.visitListExpr(this);
+			return visitor.visitSeqExpr(this);
 		}
 	}
 
 	static class Map extends Expr {
-		Map(java.util.List<Stmt> exprs) {
+		Map(List<Expr> exprs) {
 			this.mappings = exprs;
 			type = "Map";
 		}
 		
-		java.util.List<Stmt> mappings;
+		List<Expr> mappings;
 		
 		@Override
 		<R> R accept(Visitor<R> visitor) {
@@ -196,17 +367,12 @@ abstract class Expr {
 
 	static class Block extends Expr {
 		
-		java.util.List<Stmt> statements = new ArrayList<>();
+		List<Expr> expressions = new ArrayList<>();
 		Expr last;
 		
-		Block(java.util.List<Stmt> statements) {
-			this.statements = statements;
-			Stmt lastStmt = statements.get(statements.size() - 1);
-			if (lastStmt instanceof Stmt.Expression) {
-				last = ((Stmt.Expression) lastStmt).expr;
-			} else {
-				last = new Expr.Literal(null);
-			}
+		Block(List<Expr> expressions) {
+			this.expressions = expressions;
+			last = expressions.get(expressions.size() - 1);
 			type = last.type;
 		}
 
@@ -241,7 +407,7 @@ abstract class Expr {
 		}
 
 		<R> R accept(Visitor<R> visitor) {
-			return visitor.visitGetExpr(this);
+			return visitor.visitGetterExpr(this);
 		}
 
 		final Expr object;
@@ -329,20 +495,6 @@ abstract class Expr {
 			return visitor.visitTypeExpr(this);
 		}
 		final Token name;
-	}
-
-	static class Function extends Expr {
-		
-		Function(java.util.List<Token> parameters, java.util.List<Stmt> body, String type) {
-			this.parameters = parameters;
-			this.body = body;
-			this.type = type;
-	    }
-	    <R> R accept(Visitor<R> visitor) {
-	    	return visitor.visitFunctionExpr(this);
-	    }
-	    final java.util.List<Token> parameters;
-	    final java.util.List<Stmt> body;
 	}
 
 	abstract <R> R accept(Visitor<R> visitor);

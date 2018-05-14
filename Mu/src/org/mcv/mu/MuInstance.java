@@ -19,8 +19,7 @@ class MuInstance {
 		if (method != null)
 			return method;
 
-		throw new RuntimeError(name, // [hidden]
-				"Undefined property '" + name.lexeme + "'.");
+		return Mu.runtimeError("Undefined property '%s'.", name.lexeme);
 	}
 
 	void set(Token name, Object value) {

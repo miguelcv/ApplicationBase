@@ -1,14 +1,13 @@
 package org.mcv.mu;
 
-import static org.mcv.mu.TokenType.*;
+import static org.mcv.mu.Soperator.*;
+import static org.mcv.mu.Keyword.*;
 
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 class Scanner {
 	private final String source;
@@ -17,50 +16,11 @@ class Scanner {
 	private int current = 0;
 	private int line = 1;
 	static Method getCharname;
-	
+	private static final int MAX_TERMINATOR = 8;
+	private static final int BOM = 0xFEFF;
+
 	Scanner(String source) {
 		this.source = source;
-	}
-
-	private static final Map<String, TokenType> keywords;
-	private static final int MAX_TERMINATOR = 8;
-
-	static {
-		keywords = new HashMap<>();
-		keywords.put("module", MODULE);
-		keywords.put("import", IMPORT);
-		keywords.put("type", TYPE);
-		keywords.put("class", CLASS);
-		keywords.put("interface", INTERFACE);
-		keywords.put("this", THIS);
-		keywords.put("fun", FUN);
-		keywords.put("for", FOR);
-		keywords.put("in", IN);
-		keywords.put("while", WHILE);
-		keywords.put("break", BREAK);
-		keywords.put("continue", CONTINUE);
-		keywords.put("do", WHILE);
-		keywords.put("if", IF);
-		keywords.put("else", ELSE);
-		keywords.put("case", CASE);
-		keywords.put("when", WHEN);
-		keywords.put("print", PRINT);
-		keywords.put("return", RETURN);
-		keywords.put("yield", YIELD);
-		//keywords.put("super", SUPER);
-		keywords.put("var", VAR);
-		keywords.put("val", VAL);
-		keywords.put("nil", NIL);
-		keywords.put("false", FALSE);
-		keywords.put("true", TRUE);
-		
-		keywords.put("abs", ABS);
-		keywords.put("sqrt", SQRT);
-		keywords.put("xor", XOR);
-		
-		keywords.put("max", MAX);
-		keywords.put("min", MIN);
-		keywords.put("gcd", GCD);
 	}
 
 	List<Token> scanTokens() {
@@ -80,6 +40,8 @@ class Scanner {
 	private void scanToken() {
 		int c = advance();
 		switch (c) {
+		case BOM:
+			break;
 		case ' ':
 		case '\r':
 		case '\t':
@@ -436,6 +398,9 @@ class Scanner {
 		// radix
 		if(peek() == 'r') {
 			int radix = Integer.parseInt(source.substring(start, current));
+			if(radix < 2 || radix > 36) {
+				Mu.runtimeError("Radix %d is not valid: must be 2 ≤ r ≤ 36", radix);
+			}
 			start = current+1;
 			advance();
 			while (isDigit(peek(), radix))
@@ -495,15 +460,27 @@ class Scanner {
 			advance();
 		// See if the identifier is a reserved word.
 		String text = source.substring(start, current);
-
-		TokenType type = keywords.get(text);
-		if (type == null) {
+		
+		TokenType type;
+		
+		if (!isKeyword(text)) {
 			if(Character.isUpperCase(text.codePointAt(0))) {
 				type = TID;
 			} else {
 				type = ID;
 			}
+			addToken(type);
+		} else {
+			addToken(Keyword.valueOf(text.toUpperCase()));
 		}
-		addToken(type);
+	}
+	
+	private boolean isKeyword(String id) {
+		try {
+			Keyword.valueOf(id.toUpperCase());
+			return true;
+		} catch(IllegalArgumentException e) {
+			return false;
+		}
 	}
 }

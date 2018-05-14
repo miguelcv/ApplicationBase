@@ -15,8 +15,8 @@ public class Mu {
 	private static boolean hadRuntimeError = false;
 	private static final Interpreter interpreter = new Interpreter();
 
-	public static void main(String[] args) throws IOException {
-		if(new File("Test.mu").exists()) {
+	public static void main(String[] args) {
+		if (new File("Test.mu").exists()) {
 			runFile("Test.mu");
 		} else if (args.length > 1) {
 			System.out.println("Usage: mu [script]");
@@ -27,8 +27,14 @@ public class Mu {
 		}
 	}
 
-	private static void runFile(String path) throws IOException {
-		byte[] bytes = Files.readAllBytes(Paths.get(path));
+	private static void runFile(String path) {
+		byte[] bytes;
+		try {
+			bytes = Files.readAllBytes(Paths.get(path));
+		} catch (IOException e) {
+			runtimeError(e, path);
+			return;
+		}
 		run(new String(bytes, StandardCharsets.UTF_8));
 		if (hadError)
 			System.exit(65);
@@ -36,27 +42,33 @@ public class Mu {
 			System.exit(70);
 	}
 
-	private static void runPrompt() throws IOException {
-		InputStreamReader input = new InputStreamReader(System.in, "UTF-8");
-		BufferedReader reader = new BufferedReader(input);
+	private static void runPrompt() {
+		try {
+			InputStreamReader input = new InputStreamReader(System.in, "UTF-8");
+			BufferedReader reader = new BufferedReader(input);
 
-		StringBuilder buffer = new StringBuilder();
+			StringBuilder buffer = new StringBuilder();
 
-		for (;;) {
-			if(buffer.length() == 0) System.out.print("> ");
-			else System.out.print(">> ");
-			
-			String line = reader.readLine();
-			if(line.endsWith("!")) {
-				line = line.substring(0, line.length() - 1);
-				buffer.append(line).append('\n');
-				run(buffer.toString());
-				buffer = new StringBuilder();
-				hadError = false;
-				hadRuntimeError = false;
-			} else {
-				buffer.append(line).append('\n');
+			for (;;) {
+				if (buffer.length() == 0)
+					System.out.print("> ");
+				else
+					System.out.print(">> ");
+
+				String line = reader.readLine();
+				if (line.endsWith("!")) {
+					line = line.substring(0, line.length() - 1);
+					buffer.append(line).append('\n');
+					run(buffer.toString());
+					buffer = new StringBuilder();
+					hadError = false;
+					hadRuntimeError = false;
+				} else {
+					buffer.append(line).append('\n');
+				}
 			}
+		} catch (IOException ioe) {
+			runtimeError(ioe, "Could not read standard input");
 		}
 	}
 
@@ -64,7 +76,7 @@ public class Mu {
 		Scanner scanner = new Scanner(source);
 		List<Token> tokens = scanner.scanTokens();
 		Parser parser = new Parser(tokens);
-		List<Stmt> statements = parser.parse();
+		List<Expr> statements = parser.parse();
 
 		// Stop if there was a syntax error.
 		if (hadError)
@@ -77,17 +89,13 @@ public class Mu {
 		Scanner scanner = new Scanner(source);
 		List<Token> tokens = scanner.scanTokens();
 		Parser parser = new Parser(tokens);
-		List<Stmt> statements = parser.parse();
+		List<Expr> statements = parser.parse();
 
 		// Stop if there was a syntax error.
 		if (hadError)
 			return null;
 
-		Stmt last = statements.get(statements.size() - 1);
-		if(last instanceof Stmt.Expression) {
-			return ((Stmt.Expression) last).expr;
-		}
-		return null;
+		return statements.get(statements.size() - 1);
 	}
 
 	static void error(int line, String message) {
@@ -99,16 +107,24 @@ public class Mu {
 		hadError = true;
 	}
 
-	static void error(Token token, String message) {
-		if (token.type == TokenType.EOF) {
-			report(token.line, " at end", message);
+	static void error(Token token, String message, Object... args) {
+		if (token.type == Soperator.EOF) {
+			report(token.line, " at end", String.format(message, args));
 		} else {
-			report(token.line, " at '" + token.lexeme + "'", message);
+			report(token.line, " at '" + token.lexeme + "'", String.format(message, args));
 		}
 	}
 
-	static void runtimeError(Exception error) {
-		System.err.println(error.getMessage());
+	static Object runtimeError(String msg, Object... args) {
+		System.err.println(String.format(msg, args));
 		hadRuntimeError = true;
+		return null;
 	}
+	
+	static Object runtimeError(Exception error, String msg, Object... args) {
+		System.err.println(String.format(msg, args) + ": " + error.getMessage());
+		hadRuntimeError = true;
+		return null;
+	}
+
 }

@@ -3,8 +3,6 @@ package org.mcv.mu;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.mcv.mu.stdlib.TypeError;
-
 class Environment {
 	
 	final Environment enclosing;
@@ -24,7 +22,7 @@ class Environment {
 		}
 		if (enclosing != null)
 			return enclosing.get(name);
-		throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+		return Mu.runtimeError("Undefined variable '%s'.", name.lexeme);
 	}
 
 	Object get(String key) {
@@ -42,7 +40,7 @@ class Environment {
 		}
 		if (enclosing != null)
 			return enclosing.get(name);
-		throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+		return Mu.runtimeError("Undefined variable '%s'.", name.lexeme);
 	}
 
 	Object getType(String key) {
@@ -54,24 +52,25 @@ class Environment {
 		return null;
 	}
 
-	void assign(Token name, Object value, String type) {
+	Object assign(Token name, Object value, String type) {
 		if (values.containsKey(name.lexeme)) {
 			checkType(name.lexeme, values.get(name.lexeme), type);
 			values.put(name.lexeme, new Pair<>(value, type));
-			return;
+			return value;
 		}
 		if (enclosing != null) {
 			enclosing.assign(name, value, type);
-			return;
+			return value;
 		}
-		throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
+		return Mu.runtimeError("Undefined variable '%s'.", name.lexeme);
 	}
 
-	void define(String name, Object value, String type) {
+	Object define(String name, Object value, String type) {
 		if(values.containsKey(name)) {
 			checkType(name, values.get(name), type);
 		}
 		values.put(name, new Pair<>(value, type));
+		return value;
 	}
 
 	void checkType(String name, Pair<Object, String> value, String type) {
@@ -80,10 +79,11 @@ class Environment {
 			if(value.right.equals("Any")) {
 				value.right = type;
 			} else {
-				throw new TypeError("Type of variable " + name + " ("+ value.right + ") does not match value (" + value + ")");
+				Mu.runtimeError("Type of variable %s (%s) does not match value (%s)", name, value.right, value);
 			}
 		}
 	}
+	
 	@Override
 	public String toString() {
 		String result = values.toString();
