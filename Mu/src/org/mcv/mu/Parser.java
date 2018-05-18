@@ -44,7 +44,7 @@ class Parser {
 
 	private List<Expr> declarations() {
 		List<Expr> lst = new ArrayList<>();
-		Map<String, Object> attributes = new HashMap<>();
+		HashMap<String, Object> attributes = new HashMap<>();
 		try {
 			while(isAttribute()) {
 				attribute(attributes);
@@ -93,7 +93,7 @@ class Parser {
 	}
 
 	/* DECLARATIONS */
-	private Expr patternDeclaration(String kind, Map<String, Object> attributes) {
+	private Expr patternDeclaration(String kind, HashMap<String, Object> attributes) {
 		// [attr ...] kind [ID] ( params ) => {Super, ...} | [T, ...] : ( block )
 		
 		Token name = null;
@@ -133,13 +133,13 @@ class Parser {
 		}
 		
 		if(kind.equals(CLASS.name())) {
-			return new Expr.ClassDef(name, params, interfaces, body);
+			return new Expr.ClassDef(name, params, interfaces, body, attributes);
 		} else if(kind.equals(INTERFACE.name())) {
-			return new Expr.InterfaceDef(name, params, interfaces, body);
+			return new Expr.InterfaceDef(name, params, interfaces, body, attributes);
 		} else if (kind.equals(FUN.name())) {
-			return new Expr.FuncDef(name, params, returnType, body);
+			return new Expr.FuncDef(name, params, returnType, body, attributes);
 		} else if(kind.equals(ITER.name())) {
-			return new Expr.IterDef(name, params, returnType, body);
+			return new Expr.IterDef(name, params, returnType, body, attributes);
 		}
 		return null;
 	}
@@ -192,9 +192,9 @@ class Parser {
 		return params;
 	}
 
-	private Expr moduleDeclaration(Map<String, Object> attributes) {
+	private Expr moduleDeclaration(HashMap<String, Object> attributes) {
 		Expr.Getter qname = (Getter) selector();
-		return new Expr.Module(qname.name);
+		return new Expr.Module(qname.name, attributes);
 	}
 
 	private Expr importDeclaration(Map<String, Object> attributes) {
@@ -308,7 +308,7 @@ class Parser {
 	}
 	
 	private Type signature(String kind) {
-		Expr pattern = patternDeclaration(kind, Map.of());
+		Expr pattern = patternDeclaration(kind, new HashMap<>());
 		if(kind.equals(CLASS.name())) {
 			ClassDef def = (ClassDef)pattern;
 			return new Type.SignatureType(null, kind, def.params, def.interfaces, null);

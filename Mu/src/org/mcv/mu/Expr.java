@@ -55,10 +55,11 @@ public abstract class Expr {
 
 	/* DECLARATIONS */
 	static class Module extends Expr {
-		Module(Token name) {
+		Module(Token name, HashMap<String, Object> attributes) {
 			// NOPE
 			this.type = Type.Type;
 			this.name = name;
+			this.attributes = attributes;
 		}
 
 		<R> R accept(Visitor<R> visitor) {
@@ -74,12 +75,13 @@ public abstract class Expr {
 	}
 
 	public static class ClassDef extends Expr {
-		ClassDef(Token name, Params params, java.util.Set<String> interfaces, Block body) {
+		ClassDef(Token name, Params params, java.util.Set<String> interfaces, Block body, HashMap<String, Object> attributes) {
 			this.type = Type.Type;
 			this.params = params;
 			this.name = name;
 			this.interfaces = interfaces;
 			this.body = body;
+			this.attributes = attributes;
 		}
 
 		<R> R accept(Visitor<R> visitor) {
@@ -98,12 +100,13 @@ public abstract class Expr {
 
 	public static class IterDef extends Expr {
 
-		public IterDef(Token name, Params params, Type returnType, Block body) {
+		public IterDef(Token name, Params params, Type returnType, Block body, HashMap<String, Object> attributes) {
 			this.type = Type.Type;
 			this.params = params;
 			this.name = name;
 			this.returnType = returnType;
 			this.body = body;
+			this.attributes = attributes;
 		}
 
 		@Override
@@ -122,12 +125,13 @@ public abstract class Expr {
 
 	public static class FuncDef extends Expr {
 
-		public FuncDef(Token name, Params params, Type returnType, Block body) {
+		public FuncDef(Token name, Params params, Type returnType, Block body, HashMap<String, Object> attributes) {
 			this.type = Type.Type;
 			this.params = params;
 			this.name = name;
 			this.returnType = returnType;
 			this.body = body;
+			this.attributes = attributes;
 		}
 
 		@Override
@@ -147,12 +151,13 @@ public abstract class Expr {
 
 	public static class InterfaceDef extends Expr {
 
-		public InterfaceDef(Token name, Params params, java.util.Set<String> interfaces, Block body) {
+		public InterfaceDef(Token name, Params params, java.util.Set<String> interfaces, Block body, HashMap<String, Object> attributes) {
 			this.type = Type.Type;
 			this.params = params;
 			this.name = name;
 			this.interfaces = interfaces;
 			this.body = body;
+			this.attributes = attributes;
 		}
 
 		@Override
