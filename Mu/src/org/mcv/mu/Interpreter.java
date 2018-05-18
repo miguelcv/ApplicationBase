@@ -1,12 +1,12 @@
 package org.mcv.mu;
 
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.math.BigInteger;
+import org.mcv.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -25,18 +25,7 @@ public class Interpreter implements Expr.Visitor<Object> {
 	private String moduleName;
 
 	Interpreter() {
-		main.define("clock", new MuCallable() {
-			@Override
-			public int arity() {
-				return 0;
-			}
-
-			@Override
-			public Object call(Interpreter interpreter, List<Object> arguments) {
-				return (double) System.currentTimeMillis() / 1000.0;
-			}
-		}, Types.Func.name());
-
+		// FOR NOW
 		typePool.put(Types.None.name(), new TypeInfo(Types.None, INone.class));
 		typePool.put(Types.Void.name(), new TypeInfo(Types.Void, IVoid.class));
 		typePool.put(Types.Bool.name(), new TypeInfo(Types.Bool, IBool.class));
@@ -91,8 +80,8 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	/* invoke binary operator */
-	Object invoke(String type, String op, Object left, Object right) {
-		TypeInfo info = typePool.get(type);
+	Object invoke(Type type, String op, Object left, Object right) {
+		TypeInfo info = typePool.get(type.name);
 		Class<?> clazz = info.trait;
 		Method[] methods = clazz.getMethods();
 		Method method = null;
@@ -130,8 +119,8 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	/* invoke unary operator */
-	private Object invoke(String type, String op, Object arg) {
-		TypeInfo info = typePool.get(type);
+	private Object invoke(Type type, String op, Object arg) {
+		TypeInfo info = typePool.get(type.name);
 		Class<?> clazz = info.trait;
 		Method[] methods = clazz.getMethods();
 		Method method = null;
@@ -186,23 +175,27 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	@Override
-	public Object visitVarExpr(Expr.Var stmt) {
+	public Object visitVarDef(Expr.Var stmt) {
 		Object value = null;
 		if (stmt.initializer != null) {
 			value = evaluate(stmt.initializer);
 		}
-		environment.define(stmt.name.lexeme, value, typeFromValue(value));
+		if(value instanceof Type) {
+			environment.define(stmt.name.lexeme, null, (Type)value, true, stmt.isShared());
+		} else {
+			environment.define(stmt.name.lexeme, value, typeFromValue(value), true, stmt.isShared());
+		}
 		return null;
 	}
 
 	@Override
-	public Object visitValExpr(Expr.Val stmt) {
+	public Object visitValDef(Expr.Val stmt) {
 		Object value = null;
 		if (stmt.initializer == null) {
 			return Mu.runtimeError("Val %s must be initialized!", stmt.name.lexeme);
 		}
 		value = evaluate(stmt.initializer);
-		environment.define(stmt.name.lexeme, value, typeFromValue(value));
+		environment.define(stmt.name.lexeme, value, typeFromValue(value), false, stmt.isShared());
 		return null;
 	}
 
@@ -217,6 +210,10 @@ public class Interpreter implements Expr.Visitor<Object> {
 		if (expr.value instanceof String) {
 			return interpolate((String) expr.value);
 		}
+		if(expr.value instanceof Double) {
+			// INF and NaN
+			
+		}
 		return expr.value;
 	}
 
@@ -230,7 +227,7 @@ public class Interpreter implements Expr.Visitor<Object> {
 			/*
 			 * if Int -> bitwise AND else shortcircuit AND
 			 */
-			if (left instanceof BigInteger) {
+			if (left instanceof Integer) {
 				return invoke(expr.type, "and", left, evaluate(expr.right));
 			} else {
 				if (isTruthy(expr.type, expr.left)) {
@@ -243,7 +240,7 @@ public class Interpreter implements Expr.Visitor<Object> {
 			/*
 			 * if Int -> bitwise OR else shortcircuit OR
 			 */
-			if (left instanceof BigInteger) {
+			if (left instanceof Integer) {
 				return invoke(expr.type, "or", left, evaluate(expr.right));
 			} else {
 				if (isTruthy(expr.type, expr.left)) {
@@ -304,6 +301,8 @@ public class Interpreter implements Expr.Visitor<Object> {
 
 		case EQUAL:
 			return invoke(expr.type, "eq", left, right);
+		case EQEQ:
+			return invoke(expr.type, "eqeq", left, right);
 
 		case POW:
 			return invoke(expr.type, "pow", left, right);
@@ -410,7 +409,7 @@ public class Interpreter implements Expr.Visitor<Object> {
 	@Override
 	public Object visitAssignExpr(Assign expr) {
 
-		Object left = environment.get(expr.name);
+		Object left = environment.get(expr.name.lexeme);
 		Object right = evaluate(expr.value);
 		Object value = right;
 
@@ -480,6 +479,52 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	@Override
+	public Object visitSelectExpr(Expr.Select stmt) {
+		Object zwitch = evaluate(stmt.condition);
+		for(Pair<Expr, Expr> when : zip(stmt.whenExpressions, stmt.whenBranches)) {
+			if(evaluate(when.left).equals(zwitch)) {
+				return evaluate(when.right);
+			}
+		} 
+		if (stmt.elseBranch != null) {
+			return evaluate(stmt.elseBranch);
+		}
+		return null;
+	}
+
+	public static <A, B> List<Pair<A, B>> zip(List<A> listA, List<B> listB) {
+	    if (listA.size() != listB.size()) {
+	        throw new IllegalArgumentException("Lists must have same size");
+	    }
+	    List<Pair<A, B>> pairList = new LinkedList<>();
+	    for (int index = 0; index < listA.size(); index++) {
+	        pairList.add(new Pair<>(listA.get(index), listB.get(index), false));
+	    }
+	    return pairList;
+	}
+	
+	@Override
+	public Object visitForExpr(For expr) {
+		Environment env = new Environment(environment);
+		@SuppressWarnings("unchecked")
+		List<Object> values = (List<Object>) evaluate(expr.range);
+		Type type = typeFromValue(values.get(0));
+		env.define(expr.var.name.lexeme, values.get(0), typeFromValue(values.get(0)), true, false);
+
+		for (int i = 0; i < values.size(); i++) {
+			try {
+				env.assign(expr.var.name, values.get(i), type);
+				executeBlock(expr.body.expressions, env);
+			} catch (BreakJump breakJump) {
+				break;
+			} catch (ContinueJump continueJump) {
+				// Do nothing.
+			}
+		}
+		return null;
+	}
+
+	@Override
 	public Object visitReturnExpr(Expr.Return stmt) {
 		Object value = null;
 		if (stmt.value != null)
@@ -488,18 +533,10 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	@Override
-	public Object visitModuleExpr(Expr.Module stmt) {
+	public Object visitModuleDef(Expr.Module stmt) {
+		// TODO
 		moduleName = stmt.name.lexeme;
 		return null;
-	}
-
-	@Override
-	public Object visitSeqExpr(Expr.Seq lst) {
-		List<Object> result = new ArrayList<>();
-		for (Expr expr : lst.exprs) {
-			result.add(evaluate(expr));
-		}
-		return result;
 	}
 
 	@Override
@@ -524,8 +561,16 @@ public class Interpreter implements Expr.Visitor<Object> {
 			if (rng.endIncl)
 				end = end.add(BigInteger.ONE);
 
+			if(st.isNaN() || end.isNaN()) {
+				return null;
+			}
+			if(st.isNegativeInfinity() || end.isPositiveInfinity()) {
+				// do not evaluate!!
+				return rng;
+			}
+
 			for (int i = st.intValue(); i < end.intValue(); i++) {
-				result.add(BigInteger.valueOf(i));
+				result.add(Integer.valueOf(i));
 			}
 		}
 		// Char
@@ -550,13 +595,25 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	@Override
+	public Object visitSeqExpr(Expr.Seq lst) {
+		// OR IS IT A SUBSCRIPT???
+		List<Object> result = new ArrayList<>();
+		for (Expr expr : lst.exprs) {
+			result.add(evaluate(expr));
+		}
+		return result;
+	}
+
+	@Override
 	public Object visitMapExpr(Expr.Map map) {
+		// OR IS IT A FUNCTION CALL??
 		ListMap<Object> listmap = new ListMap<>();
 		for (Expr expr : map.mappings) {
 			Object value = evaluate(expr);
 			if (expr instanceof Expr.Mapping) {
 				Expr.Mapping entry = (Expr.Mapping) expr;
-				environment.define(entry.key, value, typeFromValue(value));
+				// mutable true, shared false ??
+				environment.define(entry.key, value, typeFromValue(value), true, false);
 				listmap.put(entry.key, value);
 			} else {
 				listmap.put(null, value);
@@ -566,53 +623,45 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	@Override
-	public Object visitForExpr(For expr) {
-		Environment env = new Environment(environment);
-		@SuppressWarnings("unchecked")
-		List<Object> values = (List<Object>) evaluate(expr.range);
-		String type = typeFromValue(values.get(0));
-		env.define(expr.var.name.lexeme, values.get(0), typeFromValue(values.get(0)));
+	public Object visitClassDef(Expr.ClassDef stmt) {
+		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
+		return null;
+	}
+	@Override
+	public Object visitFuncDef(Expr.FuncDef stmt) {
+		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
+		return null;
+	}
 
-		for (int i = 0; i < values.size(); i++) {
-			try {
-				env.assign(expr.var.name, values.get(i), type);
-				executeBlock(expr.body.expressions, env);
-			} catch (BreakJump breakJump) {
-				break;
-			} catch (ContinueJump continueJump) {
-				// Do nothing.
-			}
+	@Override
+	public Object visitInterfaceDef(InterfaceDef stmt) {
+		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
+		return null;
+	}
+
+	@Override
+	public Object visitIterDef(IterDef stmt) {
+		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
+		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	@Override
+	public Object visitGetterExpr(Getter expr) {
+		Object obj = evaluate(expr.object);
+		if(obj instanceof ListMap) {
+			return ((ListMap<Object>)obj).get(expr.name.lexeme);
 		}
 		return null;
 	}
 
-	@Override
-	public Object visitClassExpr(Expr.ClassDef stmt) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public Object visitCallExpr(Call expr) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public Object visitGetterExpr(Getter expr) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
+	@SuppressWarnings("unchecked")
 	@Override
 	public Object visitSetterExpr(Setter expr) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public Object visitSuperExpr(Super expr) {
-		// TODO Auto-generated method stub
+		Object obj = evaluate(expr.object);
+		if(obj instanceof ListMap) {
+			return ((ListMap<Object>)obj).put(expr.name.lexeme, evaluate(expr.value));
+		}
 		return null;
 	}
 
@@ -623,58 +672,62 @@ public class Interpreter implements Expr.Visitor<Object> {
 	}
 
 	@Override
-	public Object visitBreakExpr(Break stmt) {
-		// TODO Auto-generated method stub
-		return null;
-	}
+    public Object visitBreakExpr(Expr.Break stmt) {
+        throw new BreakJump();
+    }
 
-	@Override
-	public Object visitContinueExpr(Continue stmt) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public Object visitFunctionExpr(Expr.Function stmt) {
-		// TODO
-		// Function function = new Function(stmt.name.lexeme, stmt.body, environment,
-		// false);
-		// environment.define(stmt.name.lexeme, function);
-		return null;
-	}
-
-	@Override
-	public Object visitTypeExpr(Expr.Type expr) {
-		// TODO Auto-generated method stub
-		return null;
+    @Override
+    public Object visitContinueExpr(Expr.Continue stmt) {
+        throw new ContinueJump();
+    }
+    
+    @Override
+	public Object visitTypeLiteralExpr(Expr.TypeLiteral expr) {
+		if(expr.name != null)
+			environment.define(expr.name.lexeme, expr.literal, new Type("Type"), false, expr.isShared());
+		return expr.literal;
 	}
 
 	/* UTIL */
-	public static String typeFromValue(Object val) {
+	public static Type typeFromValue(Object val) {
 		/* We have char, string, int, real, bool */
 		if (val == null)
-			return "Void";
+			return Type.Void;
 		if (val instanceof Integer)
-			return "Char";
+			return Type.Char;
 		if (val instanceof String)
-			return "String";
+			return Type.String;
 		if (val instanceof BigInteger)
-			return "Int";
-		if (val instanceof BigDecimal)
-			return "Real";
+			return Type.Int;
+		if (val instanceof Double)
+			return Type.Real;
 		if (val instanceof Boolean)
-			return "Bool";
+			return Type.Bool;
 
-		if (val instanceof MuClass)
-			return ((MuClass) val).name;
-		if (val instanceof MuFunction)
-			return "Func";
-		if (val instanceof java.util.List)
-			return "List";
-		if (val instanceof java.util.Set)
-			return "Set";
-
-		return "None";
+		if (val instanceof Expr.ClassDef)
+			return new Type.SignatureType((ClassDef)val);
+		if (val instanceof Expr.InterfaceDef)
+			return new Type.SignatureType((InterfaceDef)val);
+		if (val instanceof Expr.IterDef)
+			return new Type.SignatureType((IterDef)val);
+		if (val instanceof Expr.FuncDef)
+			return new Type.SignatureType((FuncDef)val);
+		
+		if (val instanceof java.util.List) {
+			@SuppressWarnings("unchecked")
+			List<Object> list = (List<Object>) val;
+			if(!list.isEmpty()) {
+				return new Type.ListType(typeFromValue(list.get(0)));
+			}
+		}
+		if (val instanceof java.util.Set) {
+			@SuppressWarnings("unchecked")
+			Set<Object> set = (Set<Object>) val;
+			if(!set.isEmpty()) {
+				return new Type.SetType(typeFromValue(set.iterator().next()));
+			}
+		}
+		return new Type("None");
 	}
 
 	@SuppressWarnings("unchecked")
@@ -752,7 +805,7 @@ public class Interpreter implements Expr.Visitor<Object> {
 		}
 	}
 
-	boolean isTruthy(String type, Expr expr) {
+	boolean isTruthy(Type type, Expr expr) {
 		Object condition = evaluate(expr);
 		return (boolean) invoke(type, "isTrue", condition);
 	}

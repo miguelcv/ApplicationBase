@@ -15,5 +15,8 @@ public enum Keyword implements TokenType {
 	FOR, IN,
 	BREAK, CONTINUE,
 	FALSE, TRUE, NIL,
-	SQRT, GCD, ABS, MAX, MIN
+	SQRT, GCD, ABS, MAX, MIN,
+	MOD, REM, INF, NAN,
+	// type operators
+	REF, LIST, SET, MAP, STRUCT //, TYPE
 }

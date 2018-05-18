@@ -16,7 +16,6 @@ public class ListMap<V> extends LinkedHashMap<String, V> {
 		
 		private String prefix;
 		private long id;
-		private int digits;
 		private String fmt;
 
 		public Gensym() {
@@ -30,8 +29,7 @@ public class ListMap<V> extends LinkedHashMap<String, V> {
 		}
 
 		public void setDigits(int d) {
-			digits = d;
-			fmt = String.format("%%s%%0%dd", digits);
+			fmt = String.format("%%s%%0%dd", d);
 		}
 
 		public String nextSymbol() {

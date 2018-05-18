@@ -16,9 +16,11 @@ public class Mu {
 	private static final Interpreter interpreter = new Interpreter();
 
 	public static void main(String[] args) {
-		if (new File("Test.mu").exists()) {
-			runFile("Test.mu");
-		} else if (args.length > 1) {
+		if(new File("test.mu").exists()) {
+			runFile("test.mu");
+			return;
+		}
+		if (args.length > 1) {
 			System.out.println("Usage: mu [script]");
 		} else if (args.length == 1) {
 			runFile(args[0]);
@@ -27,7 +29,15 @@ public class Mu {
 		}
 	}
 
-	private static void runFile(String path) {
+	static void runFile(String path) {
+		runFileNoExit(path);
+		if (hadError)
+			System.exit(65);
+		if (hadRuntimeError)
+			System.exit(70);
+	}
+
+	static void runFileNoExit(String path) {
 		byte[] bytes;
 		try {
 			bytes = Files.readAllBytes(Paths.get(path));
@@ -35,14 +45,10 @@ public class Mu {
 			runtimeError(e, path);
 			return;
 		}
-		run(new String(bytes, StandardCharsets.UTF_8));
-		if (hadError)
-			System.exit(65);
-		if (hadRuntimeError)
-			System.exit(70);
+		run(new String(bytes, StandardCharsets.UTF_8) + "\n");
 	}
 
-	private static void runPrompt() {
+	static void runPrompt() {
 		try {
 			InputStreamReader input = new InputStreamReader(System.in, "UTF-8");
 			BufferedReader reader = new BufferedReader(input);

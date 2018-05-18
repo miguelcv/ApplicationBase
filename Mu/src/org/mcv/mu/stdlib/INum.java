@@ -1,13 +1,12 @@
 package org.mcv.mu.stdlib;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
+import org.mcv.math.BigInteger;
 
 public class INum  extends IReal {
 	
-	public static BigDecimal convert(Object o) {
-		if(o instanceof BigDecimal) return (BigDecimal)o;
-		if(o instanceof BigInteger)	return new BigDecimal((BigInteger)o);
+	public static Double convert(Object o) {
+		if(o instanceof Double) return (Double)o;
+		if(o instanceof BigInteger) return ((BigInteger)o).doubleValue();
 		return null; // or throw exception?
 	}
 		

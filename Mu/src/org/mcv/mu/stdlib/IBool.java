@@ -34,6 +34,10 @@ public class IBool extends IType {
 		return a || b;
 	}
 
+	public static Boolean xor(Boolean a, Boolean b) {
+		return a ^ b;
+	}
+
 	public static Boolean gt(Boolean a, Boolean b) {
 		return a ? !b : false;
 	}

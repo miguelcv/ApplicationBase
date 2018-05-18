@@ -1,10 +1,7 @@
 package org.mcv.mu;
 
-import static org.mcv.mu.Soperator.*;
 import static org.mcv.mu.Keyword.*;
-
-import java.lang.reflect.Method;
-import java.math.BigDecimal;
+import static org.mcv.mu.Soperator.*;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +12,6 @@ class Scanner {
 	private int start = 0;
 	private int current = 0;
 	private int line = 1;
-	static Method getCharname;
 	private static final int MAX_TERMINATOR = 8;
 	private static final int BOM = 0xFEFF;
 
@@ -41,6 +37,7 @@ class Scanner {
 		int c = advance();
 		switch (c) {
 		case BOM:
+			// ignore BOM
 			break;
 		case ' ':
 		case '\r':
@@ -121,6 +118,9 @@ class Scanner {
 		case '∈':
 			addToken(IN);
 			break;
+		case '∞':
+			addToken(INF);
+			break;
 			
 		/* OPERATORS */
 		case '÷':
@@ -151,7 +151,7 @@ class Scanner {
 			addToken(BANG);
 			break;
 		case '-':
-			addToken(match('-') ? MINMIN : match('=') ? MINIS : MINUS);
+			addToken(match('>') ? ARROW : match('-') ? MINMIN : match('=') ? MINIS : MINUS);
 			break;
 		case '+':
 			addToken(match('+') ? PLUSPLUS : match('=') ? PLUSIS : PLUS);
@@ -176,7 +176,7 @@ class Scanner {
 			
 		/* RELOPS */
 		case '=':
-			addToken(EQUAL);
+			addToken(match('>') ? ARROW : match('=')? EQEQ : EQUAL);
 			break;
 		case '<':
 			addToken(match('=') ? LESS_EQUAL :
@@ -189,10 +189,9 @@ class Scanner {
 			addToken(LESS_EQUAL);
 			break;
 		case '>':
-			addToken(match('=') ? GREATER_EQUAL : 
-			match('-') ? ARROW : 
-			match('>') ? 
-				( match('=') ? RSHIFTIS : RIGHTSHIFT)
+			addToken(match('=') ? GREATER_EQUAL :
+				match('>') ?
+						( match('=') ? RSHIFTIS : RIGHTSHIFT)
 				: GREATER);
 			break;
 		case '≥':
@@ -205,7 +204,7 @@ class Scanner {
 			} else if (isAlpha(c)) {
 				identifier();
 			} else {
-				Mu.error(line, "Unexpected character.");
+				Mu.error(line, "Unexpected character " + (char)c);
 			}
 			break;
 		}
@@ -349,16 +348,7 @@ class Scanner {
 			return string;
 		}
 	}
-
-	public static void main(String[] args) {
-		System.out.println(substCodes("Normal string"));
-		System.out.println(substCodes("String with #{NotUnicode} std. interpolation"));
-		System.out.println(substCodes("String with a Unicode @{LATIN SMALL LETTER A WITH ACUTE} escape"));
-		System.out.println(substCodes("String with an ASCII @{TAB} escape"));
-		System.out.println(substCodes("String with @{&quot} HTML escape"));
-		System.out.println(substCodes("String with @{\\Sigma} LaTeX escape"));		
-	}
-		
+	
 	private String collect(int max, int end) {
 		StringBuilder sb = new StringBuilder();
 		for (int i = current; i < current + max; i++) {
@@ -421,7 +411,7 @@ class Scanner {
 				while (isDigit(peek()))
 					advance();
 			}
-			addToken(REAL, new BigDecimal(strip_(source.substring(start, current))));
+			addToken(REAL, Double.valueOf(strip_(source.substring(start, current))));
 		} else if(peek() == 'e' || peek() == 'E') {
 			if(peekNext() == '+' || peekNext() == '-') {
 				advance();
@@ -429,7 +419,7 @@ class Scanner {
 			advance();
 			while (isDigit(peek()))
 				advance();
-			addToken(REAL, new BigDecimal(strip_(source.substring(start, current))));
+			addToken(REAL, Double.valueOf(strip_(source.substring(start, current))));
 		} else {
 			addToken(INT, new BigInteger(strip_(source.substring(start, current))));
 		}
@@ -446,7 +436,8 @@ class Scanner {
 	}
 
 	private boolean isAlpha(int c) {
-		if(isAtEnd()) return false;
+		if(isAtEnd()) 
+			return false;
 		return Character.isJavaIdentifierStart(c);
 	}
 
@@ -463,16 +454,18 @@ class Scanner {
 		
 		TokenType type;
 		
-		if (!isKeyword(text)) {
+		if(isKeyword(text)) {
+			addToken(Keyword.valueOf(text.toUpperCase()));
+		} else if(isAttribute(text)) {
+			addToken(Attribute.valueOf(text.toUpperCase()));
+		} else {
 			if(Character.isUpperCase(text.codePointAt(0))) {
 				type = TID;
 			} else {
 				type = ID;
 			}
 			addToken(type);
-		} else {
-			addToken(Keyword.valueOf(text.toUpperCase()));
-		}
+		}	
 	}
 	
 	private boolean isKeyword(String id) {
@@ -483,4 +476,14 @@ class Scanner {
 			return false;
 		}
 	}
+	
+	private boolean isAttribute(String id) {
+		try {
+			Attribute.valueOf(id.toUpperCase());
+			return true;
+		} catch(IllegalArgumentException e) {
+			return false;
+		}
+	}
+
 }

@@ -2,16 +2,23 @@ package org.mcv.mu;
 
 import static org.mcv.mu.Soperator.*;
 import static org.mcv.mu.Keyword.*;
-
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.mcv.mu.Expr.Block;
+import org.mcv.mu.Expr.ClassDef;
+import org.mcv.mu.Expr.FuncDef;
+import org.mcv.mu.Expr.Getter;
+import org.mcv.mu.Expr.InterfaceDef;
+import org.mcv.mu.Expr.IterDef;
+import org.mcv.mu.Params.ParamFormal;
 
 class Parser {
-
+	
 	private static class ParseError extends RuntimeException {
 		private static final long serialVersionUID = 1L;
 	}
@@ -37,20 +44,29 @@ class Parser {
 
 	private List<Expr> declarations() {
 		List<Expr> lst = new ArrayList<>();
+		Map<String, Object> attributes = new HashMap<>();
 		try {
+			while(isAttribute()) {
+				attribute(attributes);
+			}
 			if(match(MODULE)) {
-				lst.add(moduleDeclaration());
+				lst.add(moduleDeclaration(attributes));
 			} else if(match(IMPORT)) {
-				lst.add(importDeclaration());
+				lst.add(importDeclaration(attributes));
 			} else if (match(TYPE)) {
-				lst.add(typeDeclaration());
-			} else if (check(FUN) && checkNext(ID)) {
-				consume(FUN, null);
-				lst.add(function("function"));
+				lst.add(typeDeclaration(attributes));
+			} else if (match(CLASS)) {
+				lst.add(patternDeclaration(CLASS.name(), attributes));
+			} else if (match(INTERFACE)) {
+				lst.add(patternDeclaration(INTERFACE.name(), attributes));
+			} else if (match(FUN)) {
+				lst.add(patternDeclaration(FUN.name(), attributes));
+			} else if (match(ITER)) {
+				lst.add(patternDeclaration(ITER.name(), attributes));
 			} else if (match(VAR)) {
-				lst.addAll(varDeclarations());
+				lst.addAll(varDeclarations(attributes));
 			} else if (match(VAL)) {
-				lst.addAll(valDeclarations());
+				lst.addAll(valDeclarations(attributes));
 			} else {
 				lst.add(statement());
 			}
@@ -61,30 +77,324 @@ class Parser {
 		}
 	}
 
-	private Expr moduleDeclaration() {
-		Token name = consume(ID, "Expect module name.");
-		return new Expr.Module(name);
+	private boolean isAttribute() {
+		try {
+			Attribute.valueOf(peek().lexeme.toUpperCase());
+			return true;
+		} catch(IllegalArgumentException e) {
+			return false;
+		}
 	}
 
-	private Expr importDeclaration() {
-		// TODO
+	private void attribute(Map<String, Object> attributes) {
+		/* for now, values are only booleans */
+		Token attr = advance();
+		attributes.put(attr.lexeme, true);		
+	}
+
+	/* DECLARATIONS */
+	private Expr patternDeclaration(String kind, Map<String, Object> attributes) {
+		// [attr ...] kind [ID] ( params ) => {Super, ...} | [T, ...] : ( block )
+		
+		Token name = null;
+		Params params = null;
+		Set<String> interfaces = null;
+		Type returnType = null;
+		Expr.Block body = null;
+		
+		if(kind.equals(FUN.name()) || kind.equals(ITER.name())) {
+			if(match(ID))
+				name = consume(ID, "Expect name.");
+		} else if(kind.equals(CLASS.name()) || kind.equals(INTERFACE.name())) {
+			if(match(ID))
+				name = consume(TID, "Expect type name.");
+		} else {
+			Mu.error(tokens.get(current).line, "Invalid pattern declaration");
+		}
+		
+		if(match(LEFT_PAREN)) {
+			// val params
+			params = params();
+		}
+		
+		consume(ARROW, "Expected arrow");
+		
+		if(match(LEFT_BRACE)) {
+			interfaces = new HashSet<>(eval(set()));
+		} else {
+			returnType = typeLiteral();
+		}
+
+		if(match(COLON)) {
+			consume(COLON, "Expected :");
+			if(match(LEFT_PAREN)) {
+				body = (Block) block();
+			}
+		}
+		
+		if(kind.equals(CLASS.name())) {
+			return new Expr.ClassDef(name, params, interfaces, body);
+		} else if(kind.equals(INTERFACE.name())) {
+			return new Expr.InterfaceDef(name, params, interfaces, body);
+		} else if (kind.equals(FUN.name())) {
+			return new Expr.FuncDef(name, params, returnType, body);
+		} else if(kind.equals(ITER.name())) {
+			return new Expr.IterDef(name, params, returnType, body);
+		}
 		return null;
 	}
 
-	// TODO
-	private Expr typeDeclaration() {
-		Token name = consume(ID, "Expect type name.");
-		List<Expr.Function> methods = new ArrayList<>();
-		List<Expr.Function> classMethods = new ArrayList<>();
-		consume(LEFT_PAREN, "Expect '(' before type body.");
-		while (!check(RIGHT_PAREN) && !isAtEnd()) {
-			// boolean isClassMethod = match(CLASS);
-			// (isClassMethod ? classMethods : methods).add(function("method"));
-		}
-		consume(RIGHT_PAREN, "Expect ')' after type body.");
-		return new Expr.ClassDef(name, null, methods, classMethods);
+	private Params params() {
+		// ( =>type name [: defval], ..., [*])
+		Params params = new Params();
+		do {
+			
+			boolean typeParam = false;
+			
+			if(match(STAR)) {
+				params.vararg = true;
+				break;
+			}
+			
+			Map<String, Object> attributes = new HashMap<>();
+			
+			while(isAttribute()) {
+				attribute(attributes);
+			}
+
+			Type type = typeLiteral();
+			if(type == null) {
+				Mu.error(tokens.get(current).line, "Expected type");
+			}
+			Token name = null;
+			
+			if(check(ID)) {
+				name = consume(ID, "Expect name.");
+			}
+			if(type.name.equals("Type") && check(TID)) {
+				typeParam = true;
+				name = consume(ID, "Expect type name.");
+			}
+			
+			Expr defval = null;
+			if(match(COLON)) {
+				// type
+				if(typeParam) {
+					defval = new Expr.TypeLiteral(null, typeLiteral(), attributes);
+				} else {
+					defval = expression();
+				}
+			}
+			ParamFormal formal = new ParamFormal(name.lexeme, type, defval);
+			params.add(formal);
+		} while(match(COMMA));
+		consume(RIGHT_PAREN, "Expected )");
+		return params;
 	}
 
+	private Expr moduleDeclaration(Map<String, Object> attributes) {
+		Expr.Getter qname = (Getter) selector();
+		return new Expr.Module(qname.name);
+	}
+
+	private Expr importDeclaration(Map<String, Object> attributes) {
+		// TODO
+		// import QID [ where ( map ) ]
+		return null;
+	}
+
+	private Expr typeDeclaration(Map<String, Object> attributes) {
+		// type ID: { ID, ... } | [ ID, ... ] | TID | list(...) | set(...) | ref(...) | [T, ...]
+		
+		Token name = consume(TID, "Expect type name.");
+		consume(COLON, "Expected colon");		
+		return new Expr.TypeLiteral(name, typeLiteral(), attributes);
+	}
+
+	private Type typeLiteral() {
+
+		Type left = type();
+		
+		/* union */
+		if(match(OR)) {
+			return new Type.UnionType(left, typeLiteral());
+		}
+		
+		/* intersection */
+		if(match(AND)) {
+			return new Type.IntersectionType(left, typeLiteral());
+		}
+		
+		return left;
+	}
+	
+	private Type type() {
+		/* signature */
+		if(match(FUN, ITER, CLASS, INTERFACE)) {
+			return signature(previous().lexeme);
+		}
+		
+		if(match(TID)) {
+			/* simple type name or alias */
+			return new Type(previous().lexeme);
+		}
+		
+		if(match(LEFT_BRK)) {
+			String name = tokens.get(current - 3).lexeme;
+			return new Type.ListEnum(name, eval(list()));
+		}
+
+		if(match(LEFT_BRACE)) {
+			String name = tokens.get(current - 3).lexeme;
+			return new Type.SetEnum(name, new HashSet<String>(eval(set())));
+		}
+		
+		if(match(LIST)) {
+			consume(LEFT_PAREN, "Expected (");
+			Type type = typeLiteral();
+			consume(RIGHT_PAREN, "Expected )");
+			return new Type.ListType(type);
+		}
+		
+		if(match(SET)) {
+			consume(LEFT_PAREN, "Expected (");
+			Type type = typeLiteral();
+			consume(RIGHT_PAREN, "Expected )");
+			return new Type.SetType(type);
+		}
+		
+		if(match(REF)) {
+			consume(LEFT_PAREN, "Expected (");
+			Type type = typeLiteral();
+			consume(RIGHT_PAREN, "Expected )");
+			return new Type.RefType(type);
+		}
+		
+		/* struct ~ tuple */
+		if(match(STRUCT)) {
+			consume(LEFT_PAREN, "Expected (");
+			List<Type> types = new ArrayList<>();
+			do {
+				types.add(typeLiteral());
+			} while(match(COMMA));
+			consume(RIGHT_PAREN, "Expected )");
+			return new Type.StructType(types);
+		}		
+
+		/* map K->V */
+		if(match(MAP)) {
+			consume(LEFT_PAREN, "Expected (");
+			Type key = typeLiteral();
+			consume(COMMA, "Expected ,");
+			Type val = typeLiteral();
+			consume(RIGHT_PAREN, "Expected )");
+			return new Type.MapType(key, val);
+		}
+		
+		if(match(TYPE)) {
+			if(match(LEFT_PAREN)) {
+				advance();
+			}
+			List<String> interfaces = new ArrayList<>();
+			do {
+				interfaces.add(consume(TID, "expected type ID").lexeme);
+			} while(match(COMMA));
+			if(match(RIGHT_PAREN))
+				advance();
+			return new Type.TypeType(interfaces);
+		}		
+
+		return null;
+	}
+	
+	private Type signature(String kind) {
+		Expr pattern = patternDeclaration(kind, Map.of());
+		if(kind.equals(CLASS.name())) {
+			ClassDef def = (ClassDef)pattern;
+			return new Type.SignatureType(null, kind, def.params, def.interfaces, null);
+		} else if(kind.equals(INTERFACE.name())) {
+			InterfaceDef def = (InterfaceDef)pattern;
+			return new Type.SignatureType(null, kind, def.params, def.interfaces, null);
+		} else if (kind.equals(FUN.name())) {
+			FuncDef def = (FuncDef)pattern;
+			return new Type.SignatureType(null, kind, def.params, null, def.returnType);
+		} else if(kind.equals(ITER.name())) {
+			IterDef def = (IterDef)pattern;
+			return new Type.SignatureType(null, kind, def.params, null, def.returnType);
+		}
+		return null;
+	}
+
+	private List<String> eval(Expr se) {
+		List<String> ret = new ArrayList<>();
+		if(se instanceof Expr.Set) {
+			Expr.Set set = (Expr.Set)se;
+			for(Expr expr : set.exprs) {
+				if(expr instanceof Expr.Variable) {
+					ret.add(((Expr.Variable)expr).name.lexeme);
+				}
+			}
+		} else if(se instanceof Expr.Seq) {
+			Expr.Seq seq = (Expr.Seq)se;
+			for(Expr expr : seq.exprs) {
+				if(expr instanceof Expr.Variable) {
+					ret.add(((Expr.Variable)expr).name.lexeme);
+				}
+			}
+		} else {
+			Mu.runtimeError("Bad type %s", se.toString());
+		}
+		return ret;
+	}
+	
+	private List<Expr> varDeclarations(Map<String, Object> attributes) {
+		List<Expr> lst = new ArrayList<>();
+		Token name = consume(ID, "Expect variable name.");
+
+		Expr initializer = null;
+		if (match(COLON)) {
+			Type type = typeLiteral();
+			if(type == null) {
+				initializer = expression();
+			} else {
+				initializer = new Expr.TypeLiteral(null, type, attributes);
+			}
+		}
+		lst.add(new Expr.Var(name, initializer, (boolean)attributes.getOrDefault("shared", false)));
+		while (match(COMMA)) {
+			name = consume(ID, "Expect variable name.");
+			consume(COLON, "Expect initializer in multiple variable declaration");
+			initializer = expression();
+			lst.add(new Expr.Var(name, initializer, (boolean)attributes.getOrDefault("shared", false)));
+		}
+		return lst;
+	}
+
+	private List<Expr> valDeclarations(Map<String, Object> attributes) {
+		List<Expr> lst = new ArrayList<>();
+		Token name = consume(ID, "Expect variable name.");
+
+		Expr initializer = null;
+		if (match(COLON)) {
+			initializer = expression();
+		}
+		
+		if (initializer == null) {
+			throw error(name, "val must have initializer: %s", name.lexeme);
+		}
+		
+		lst.add(new Expr.Val(name, initializer, (boolean)attributes.getOrDefault("shared", false)));
+		while (match(COMMA)) {
+			name = consume(ID, "Expect variable name.");
+			consume(COLON, "Expect initializer in multiple variable declaration");
+			initializer = expression();
+			lst.add(new Expr.Var(name, initializer, (boolean)attributes.getOrDefault("shared", false)));
+		}
+		// consume(SEMICOLON, "Expect ';' after variable declaration.");
+		return lst;
+	}
+
+	/* STATEMENTS */
 	private Expr statement() {
 		if (match(FOR))
 			return forStatement();
@@ -100,77 +410,9 @@ class Parser {
 			return breakStatement();
 		if (match(CONTINUE))
 			return continueStatement();
+		if (match(SELECT))
+			return selectStatement();
 		return expression();
-	}
-
-	private List<Expr> varDeclarations() {
-		List<Expr> lst = new ArrayList<>();
-		Token name = consume(ID, "Expect variable name.");
-
-		Expr initializer = null;
-		if (match(COLON)) {
-			initializer = expression();
-		}
-		lst.add(new Expr.Var(name, initializer));
-		while (match(COMMA)) {
-			name = consume(ID, "Expect variable name.");
-			consume(COLON, "Expect initializer in multiple variable declaration");
-			initializer = expression();
-			lst.add(new Expr.Var(name, initializer));
-		}
-		// consume(SEMICOLON, "Expect ';' after variable declaration.");
-		return lst;
-	}
-
-	private List<Expr> valDeclarations() {
-		List<Expr> lst = new ArrayList<>();
-		Token name = consume(ID, "Expect variable name.");
-
-		Expr initializer = null;
-		if (match(COLON)) {
-			initializer = expression();
-		}
-		
-		if (initializer == null) {
-			throw error(name, "val must have initializer: %s", name.lexeme);
-		}
-		
-		lst.add(new Expr.Val(name, initializer));
-		while (match(COMMA)) {
-			name = consume(ID, "Expect variable name.");
-			consume(COLON, "Expect initializer in multiple variable declaration");
-			initializer = expression();
-			lst.add(new Expr.Var(name, initializer));
-		}
-		// consume(SEMICOLON, "Expect ';' after variable declaration.");
-		return lst;
-	}
-
-	private Expr.Function function(String kind) {
-		// TODO
-		//Token name = consume(ID, "Expect " + kind + " name.");
-		// params ??
-		// body ??
-		// type ??
-		return new Expr.Function(null, null, "None");
-		//name, functionBody(kind));
-	}
-
-	private Expr.Function functionBody() {
-		List<Token> parameters = null;
-		if (check(LEFT_PAREN)) {
-			consume(LEFT_PAREN, "Expect parameter object");
-			parameters = new ArrayList<>();
-			if (!check(RIGHT_PAREN)) {
-				do {
-					parameters.add(consume(ID, "Expect parameter name"));
-				} while (match(COMMA));
-			}
-		}
-		consume(RIGHT_PAREN, "Expect ')' after parameters");
-		Block blk = (Block) block();
-		List<Expr> body = blk.expressions;
-		return new Expr.Function(parameters, body, blk.last.type);
 	}
 
 	private Expr printStatement() {
@@ -183,7 +425,7 @@ class Parser {
 		// for var i in range block
 		Expr.Var var = null;
 		if(match(VAR)) {
-			var = (Expr.Var)varDeclarations().get(0);
+			var = (Expr.Var)varDeclarations(Map.of()).get(0);
 		}
 		consume(IN, "Expected IN");
 		Expr.Range range = (Expr.Range) range();
@@ -252,6 +494,31 @@ class Parser {
 		return new Expr.Continue();
 	}
 
+	private Expr selectStatement() {
+		// 	SELECT expr (
+		//		WHEN expr (block)
+		//		...
+		//		ELSE (block)
+		// 	)
+		Expr condition = expression();
+		consume(LEFT_PAREN, "Exepct '('");
+		
+		List<Expr> whenExpressions = new ArrayList<Expr>();
+		List<Expr> whenBranches = new ArrayList<Expr>();
+		
+		while(match(WHEN)) {
+			whenExpressions.add(expression());
+			whenBranches.add(block());
+		}
+		Expr elseBranch = null;
+		if (match(ELSE)) {
+			elseBranch = block();
+		}
+		consume(RIGHT_PAREN, "Expect ')'");
+		return new Expr.Select(condition, whenExpressions, whenBranches, elseBranch);
+	}
+	
+	/* EXPRESSIONS */
 	private Expr expression() {
 		return range();
 	}
@@ -331,7 +598,7 @@ class Parser {
 	private Expr equality() {
 		Expr expr = comparison();
 
-		while (match(NOT_EQUAL, EQUAL)) {
+		while (match(NOT_EQUAL, EQUAL, EQEQ)) {
 			Token operator = previous();
 			Expr right = comparison();
 			expr = new Expr.Binary(expr, operator, right);
@@ -435,23 +702,30 @@ class Parser {
 		return builtins();
 	}
 
-	// check
 	private Expr builtins() {
 		if (match(ABS)) {
 			Token operator = previous();
-			Expr right = primary();
+			Expr right = selector();
 			return new Expr.Unary(operator, right);			
 		}
-		Expr expr = primary();
+		Expr expr = selector();
 		if(match(GCD, MAX, MIN)) {
 			Token operator = previous();
-			Expr right = primary();
+			Expr right = selector();
 			return new Expr.Binary(expr, operator, right);
 		}
 		return expr;
 	}
 
-
+	private Expr selector() {
+		Expr expr = primary();
+		while(match(DOT)) {
+			Token name = consume(ID, "Expect property name after '.'.");
+		    expr = new Expr.Getter(expr, name);
+		}
+		return expr;
+	}
+	
 	private Expr primary() {
 		if (match(FALSE))
 			return new Expr.Literal(false);
@@ -461,6 +735,10 @@ class Parser {
 			return new Expr.Literal(null);
 		if (match(THIS))
 			return new Expr.This(previous());
+		if (match(INF))
+			return new Expr.Literal(Double.POSITIVE_INFINITY);
+		if (match(NAN))
+			return new Expr.Literal(Double.NaN);
 
 		if (match(INT, REAL, STRING, CHAR)) {
 			return new Expr.Literal(previous().literal);
@@ -469,7 +747,7 @@ class Parser {
 			return new Expr.Variable(previous());
 		}
 		if (match(TID)) {
-			return new Expr.Type(previous());
+			return new Expr.Variable(previous());
 		}
 		
 		/* aggregate literals here */
@@ -488,10 +766,10 @@ class Parser {
 		}
 
 		// Lambda
-		if (check(FUN) && !checkNext(ID)) {
-			advance();
-			return functionBody();
-		}
+		//if (check(FUN) && !checkNext(ID)) {
+		//	advance();
+		//	return functionBody();
+		//}
 
 		if (match(SEMICOLON)) {
 			return new Expr.Literal(null);
@@ -569,7 +847,8 @@ class Parser {
 		}
 		return null;
 	}
-	
+
+	/* Parser UTIL */
 	private boolean match(TokenType... types) {
 		for (TokenType type : types) {
 			if (check(type)) {
