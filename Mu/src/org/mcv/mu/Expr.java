@@ -22,17 +22,19 @@ public abstract class Expr {
 		
 		/* print */
 		R visitPrintExpr(Print expr);
+		
 		/* ctrl */
+		R visitIfExpr(If expr);
+		R visitSelectExpr(Select select);
 		R visitForExpr(For expr);
 		R visitWhileExpr(While expr);
 		R visitBreakExpr(Break expr);
 		R visitContinueExpr(Continue expr);
 		R visitReturnExpr(Return expr);
+		
 		/* expr */
 		R visitAssignExpr(Assign expr);
 		R visitBinaryExpr(Binary expr);
-		R visitIfExpr(If expr);
-		R visitSelectExpr(Select select);
 		R visitThisExpr(This expr);
 		R visitGetterExpr(Getter expr);
 		R visitSetterExpr(Setter expr);
@@ -51,6 +53,7 @@ public abstract class Expr {
 	
 	// Nested Expr classes here...
 
+	/* DECLARATIONS */
 	static class Module extends Expr {
 		Module(Token name) {
 			// NOPE
@@ -63,6 +66,10 @@ public abstract class Expr {
 		}
 
 		final Token name;
+		HashMap<String, Object> attributes;
+		public boolean isShared() {
+			return (boolean)attributes.getOrDefault(SHARED, false);
+		}
 		// public environment??
 	}
 
@@ -83,6 +90,10 @@ public abstract class Expr {
 		Params params;
 		java.util.Set<String> interfaces;
 		Block body;
+		HashMap<String, Object> attributes;
+		public boolean isShared() {
+			return (boolean)attributes.getOrDefault(SHARED, false);
+		}
 	}
 
 	public static class IterDef extends Expr {
@@ -103,6 +114,10 @@ public abstract class Expr {
 		Params params;
 		Type returnType;
 		Block body;
+		HashMap<String, Object> attributes;
+		public boolean isShared() {
+			return (boolean)attributes.getOrDefault(SHARED, false);
+		}
 	}
 
 	public static class FuncDef extends Expr {
@@ -124,6 +139,10 @@ public abstract class Expr {
 		Params params;
 		Type returnType;
 		Block body;
+		HashMap<String, Object> attributes;
+		public boolean isShared() {
+			return (boolean)attributes.getOrDefault(SHARED, false);
+		}
 	}
 
 	public static class InterfaceDef extends Expr {
@@ -144,35 +163,10 @@ public abstract class Expr {
 		Params params;
 		java.util.Set<String> interfaces;
 		Block body;
-
-	}
-
-	static class Print extends Expr {
-		Print(Expr expression) {
-			this.expression = expression;
-			type = Type.Void;
+		HashMap<String, Object> attributes;
+		public boolean isShared() {
+			return (boolean)attributes.getOrDefault(SHARED, false);
 		}
-
-		<R> R accept(Visitor<R> visitor) {
-			return visitor.visitPrintExpr(this);
-		}
-
-		final Expr expression;
-	}
-
-	static class Return extends Expr {
-		Return(Token keyword, Expr value) {
-			this.keyword = keyword;
-			this.value = value;
-			type = value.type;
-		}
-
-		<R> R accept(Visitor<R> visitor) {
-			return visitor.visitReturnExpr(this);
-		}
-
-		final Token keyword;
-		final Expr value;
 	}
 
 	static class Var extends Expr {
@@ -219,6 +213,34 @@ public abstract class Expr {
 			return (boolean)attributes.getOrDefault(SHARED, false);
 		}
 	}
+	
+	static class Print extends Expr {
+		Print(Expr expression) {
+			this.expression = expression;
+			type = Type.Void;
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitPrintExpr(this);
+		}
+
+		final Expr expression;
+	}
+
+	static class Return extends Expr {
+		Return(Token keyword, Expr value) {
+			this.keyword = keyword;
+			this.value = value;
+			type = value.type;
+		}
+
+		<R> R accept(Visitor<R> visitor) {
+			return visitor.visitReturnExpr(this);
+		}
+
+		final Token keyword;
+		final Expr value;
+	}
 
 	static class While extends Expr {
 		While(Expr condition, Expr body) {
@@ -260,7 +282,6 @@ public abstract class Expr {
 		<R> R accept(Visitor<R> visitor) {
 			return visitor.visitBreakExpr(this);
 		}
-
 	}
 
 	static class Continue extends Expr {
@@ -271,7 +292,6 @@ public abstract class Expr {
 		<R> R accept(Visitor<R> visitor) {
 			return visitor.visitContinueExpr(this);
 		}
-
 	}
 
 	static class Seq extends Expr {

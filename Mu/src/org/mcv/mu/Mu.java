@@ -1,7 +1,6 @@
 package org.mcv.mu;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -16,10 +15,6 @@ public class Mu {
 	private static final Interpreter interpreter = new Interpreter();
 
 	public static void main(String[] args) {
-		if(new File("test.mu").exists()) {
-			runFile("test.mu");
-			return;
-		}
 		if (args.length > 1) {
 			System.out.println("Usage: mu [script]");
 		} else if (args.length == 1) {
