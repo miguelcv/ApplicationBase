@@ -1,7 +1,6 @@
 package org.mcv.mu;
 
 import java.lang.reflect.Method;
-import org.mcv.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -12,257 +11,290 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.mcv.math.BigInteger;
 import org.mcv.mu.Expr.*;
-import org.mcv.mu.stdlib.*;
+import org.mcv.mu.Parser.ParserError;
+import org.mcv.mu.Type.*;
 
-public class Interpreter implements Expr.Visitor<Object> {
+public class Interpreter implements Expr.Visitor<Result> {
 
-	final Environment main = new Environment();
-	// FOR NOW
-	static final Map<String, TypeInfo> typePool = new HashMap<>();
-	private Environment environment = main;
+	private static final String DOES_NOT_UNDERSTAND = "doesNotUnderstand";
+	Environment main;
+	Environment environment;
 	@SuppressWarnings("unused")
 	private String moduleName;
 
-	Interpreter() {
-		// FOR NOW
-		typePool.put(Types.None.name(), new TypeInfo(Types.None, INone.class));
-		typePool.put(Types.Void.name(), new TypeInfo(Types.Void, IVoid.class));
-		typePool.put(Types.Bool.name(), new TypeInfo(Types.Bool, IBool.class));
-		TypeInfo num = new TypeInfo(Types.Num, INum.class);
-		typePool.put("Int&Real", num);
-		typePool.put("Real&Int", num);
-		typePool.put(Types.Int.name(), new TypeInfo(Types.Int, IInt.class));
-		typePool.put(Types.Real.name(), new TypeInfo(Types.Real, IReal.class));
-		TypeInfo text = new TypeInfo(Types.Text, IText.class);
-		typePool.put("Char&String", text);
-		typePool.put("String&Char", text);
-		typePool.put(Types.Char.name(), new TypeInfo(Types.Char, IChar.class));
-		typePool.put(Types.String.name(), new TypeInfo(Types.String, IString.class));
-		typePool.put(Types.Any.name(), new TypeInfo(Types.Any, IAny.class));
-		typePool.put(Types.Type.name(), new TypeInfo(Types.Type, IType.class));
-		typePool.put(Types.Func.name(), new TypeInfo(Types.Func, IFunc.class));
-		typePool.put(Types.List.name(), new TypeInfo(Types.List, IList.class));
-		typePool.put(Types.Set.name(), new TypeInfo(Types.Set, ISet.class));
-		typePool.put(Types.Map.name(), new TypeInfo(Types.Map, IMap.class));
-		typePool.put(Types.Range.name(), new TypeInfo(Types.Range, IRange.class));
-	}
+	Expr current;
+	
+	static class InterpreterError extends ParserError {
+		private static final long serialVersionUID = 1L;
+		protected Expr expr;
 
-	void interpret(List<Expr> statements) {
-		try {
-			for (Expr statement : statements) {
-				evaluate(statement);
-			}
-		} catch (Exception error) {
-			Mu.runtimeError(error, "Error in interpreter");
+		public InterpreterError(String msg) {
+			super(msg);
+		}
+
+		public InterpreterError(String msg, Object... args) {
+			super(String.format(msg, args));
+		}
+
+		public InterpreterError(Exception e) {
+			super(e);
 		}
 	}
 
-	public Object executeBlock(List<Expr> body, Environment environment) {
-		Environment env = new Environment(environment);
-		Environment previous = this.environment;
-		try {
+	public Interpreter(Environment main) {
+		this.environment = new Environment("default", main);
+		main.define("Mu", new Result(this, Type.Any), false, true);
+	}
 
-			this.environment = env;
-			Object value = null;
-			for (int i = 0; i < body.size(); i++) {
-				value = evaluate(body.get(i));
+	void interpret(List<Expr> expressions) {
+		
+		for (Expr current : expressions) {
+			try {
+				evaluate(current);
+			} catch(ReturnJump ret) {
+				System.out.println("Program exited with: " + stringify(ret.value));
+				return;
+			} catch(MuException me) {
+				me.expr = current;
+				me.line = current.line;		
+				Mu.error(me);
+			} catch (InterpreterError e) {
+				e.expr = current;
+				e.line = current.line;
+				Mu.error(e);
+			} catch (Exception e) {
+				InterpreterError ie = new InterpreterError(e);
+				ie.expr = current;
+				ie.line = current.line;
+				Mu.error(ie);
 			}
-			return value;
-
-		} finally {
-			this.environment = previous;
 		}
 	}
 
-	private Object evaluate(Expr expr) {
+	Result evaluate(Expr expr) {
 		return expr.accept(this);
 	}
 
 	/* invoke binary operator */
-	Object invoke(Type type, String op, Object left, Object right) {
-		TypeInfo info = typePool.get(type.name);
-		Class<?> clazz = info.trait;
-		Method[] methods = clazz.getMethods();
-		Method method = null;
-		for (Method m : methods) {
-			if (m.getName().equals(op)) {
-				method = m;
-				break;
+	Result invoke(String op, Result left, Result right) {
+		
+		if(!left.type.equals(right.type)) {
+			Result[] converted = widen(left, right);
+			left = converted[0];
+			right = converted[1];
+		}
+		Type type = left.type;
+		Object leftVal = left.value;
+		Object rightVal = right.value;
+		Object func = type.interfaces.get(op);
+
+		if (func == null) {
+			System.err.println("Func " + op + " not found for type " + type);
+			func = type.interfaces.get(DOES_NOT_UNDERSTAND);
+			if(func instanceof Method) {
+				try {
+					Method m = (Method)func;
+					return new Result(m.invoke(null, op, left, right), typeFromClass(m.getReturnType()));
+				} catch(Exception e) {}
+			} else {
+				throw new InterpreterError("No native operator: %s doesNotUnderstand %s", left.type, op, right.type);
 			}
 		}
-		if (method == null) {
-			return Mu.runtimeError("No such operator: %s %s %s", left, method, right);
-		}
-		try {
-			return method.invoke(null, left, right);
-		} catch (IllegalArgumentException e) {
-			// try convert();
-			Method convert = null;
-			for (Method m : methods) {
-				if (m.getName().equals("convert")) {
-					convert = m;
-					break;
-				}
-			}
-			if (convert == null) {
-				return Mu.runtimeError("No such operator: %s %s %s", left, method, right);
-			}
+
+		if (func instanceof Method) {
+			Method method = (Method) func;
 			try {
-				return method.invoke(null, convert.invoke(null, left), convert.invoke(null, right));
-			} catch (Exception e2) {
-				return Mu.runtimeError("No such operator: %s %s %s", left, method, right);
+				return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
+			} catch (Exception e) {
+				throw new InterpreterError("No such operator: %s %s %s", left.type, op, right.type);
 			}
-		} catch (Exception e) {
-			return Mu.runtimeError("No such operator: %s %s %s", left, method, right);
+		} else {
+			throw new InterpreterError("No native operator: %s %s %s", left.type, op, right.type);
 		}
 	}
 
 	/* invoke unary operator */
-	private Object invoke(Type type, String op, Object arg) {
-		TypeInfo info = typePool.get(type.name);
-		Class<?> clazz = info.trait;
-		Method[] methods = clazz.getMethods();
-		Method method = null;
-		for (Method m : methods) {
-			if (m.getName().equals(op)) {
-				method = m;
-				break;
+	private Result invoke(Type type, String op, Object arg) {
+		if (arg instanceof Result) {
+			arg = ((Result) arg).value;
+		}
+		Object func = type.interfaces.get(op);
+
+		if (func == null) {
+			System.err.println("Func " + op + " not found for type " + type);
+			func = type.interfaces.get(DOES_NOT_UNDERSTAND);
+			if(func instanceof Method) {
+				try {
+					Method m = (Method)func;
+					return new Result(m.invoke(null, op, arg), typeFromClass(m.getReturnType()));
+				} catch(Exception e) {}
+			} else {
+				throw new InterpreterError("No native operator: doesNotUnderstand %s", arg);
 			}
 		}
-		if (method == null) {
-			return Mu.runtimeError("No such operator: %s %s", method, arg);
-		}
-		try {
-			return method.invoke(null, arg);
-		} catch (IllegalArgumentException e) {
-			// try convert();
-			Method convert = null;
-			for (Method m : methods) {
-				if (m.getName().equals("convert")) {
-					convert = m;
-					break;
-				}
-			}
-			if (convert == null) {
-				return Mu.runtimeError("No such operator: %s %s", method, arg);
-			}
+
+		if (func instanceof Method) {
+			Method method = (Method) func;
 			try {
-				return method.invoke(null, convert.invoke(null, arg));
-			} catch (Exception e2) {
-				return Mu.runtimeError("No such operator: %s %s", method, arg);
+				return new Result(method.invoke(null, arg), typeFromClass(method.getReturnType()));
+			} catch (Exception e) {
+				throw new InterpreterError("No such operator: %s %s", op, type);
 			}
-		} catch (Exception e) {
-			return Mu.runtimeError("No such operator: %s %s", method, arg);
+		} else {
+			throw new InterpreterError("No such operator: %s %s", op, type);
 		}
 	}
 
-	private Object assign(Assign expr, Object value) {
-		return environment.assign(expr.name, value, typeFromValue(value));
+	private Result[] widen(Result r1, Result r2) {
+		
+		Object func1 = r1.type.interfaces.get("to" + r2.type);
+		Object func2 = r2.type.interfaces.get("to" + r1.type);
+		Result[] res = new Result[2];
+		
+		if (func1 != null && func1 instanceof Method) {
+			res[0] = convert((Method)func1, r1);
+			res[1] = r2;
+		} else if (func2 != null && func2 instanceof Method) {
+			res[0] = r1;
+			res[1] = convert((Method)func2, r2);
+		} else {
+			System.err.println(String.format("No conversion between types %s and %s", r1.type, r2.type));
+			res[0] = r1;
+			res[1] = r2;
+		}
+		return res;
 	}
 
-	private Object assign(Variable expr, Object value) {
-		return environment.assign(expr.name, value, typeFromValue(value));
+	private Result convert(Method func, Result r) {
+		try {
+			Object val = func.invoke(null, r.value);
+			return new Result(val, typeFromClass(val.getClass()));
+		} catch(Exception e) {
+			return r;
+		}
+	}
+
+	private Result assign(Assign expr, Object value) {
+		return environment.assign(expr.name, new Result(value, typeFromValue(value)));
+	}
+
+	private Result assign(Variable expr, Object value) {
+		return environment.assign(expr.name, new Result(value, typeFromValue(value)));
 	}
 
 	/* VISITORS */
 
 	@Override
-	public Object visitPrintExpr(Expr.Print stmt) {
-		Object value = evaluate(stmt.expression);
-		System.out.println(unquote(stringify(value)));
-		return null;
+	public Result visitPrintExpr(Expr.Print stmt) {
+		Expr blk = stmt.expression;
+		System.out.println(unquote(stringify(evaluate(blk))));
+		return new Result(null, Type.Void);
 	}
 
 	@Override
-	public Object visitVarDef(Expr.Var stmt) {
-		Object value = null;
+	public Result visitPrintTypeExpr(Expr.PrintType stmt) {
+		Expr blk = stmt.expression;
+		System.out.println(unquote(stringifyType(evaluate(blk))));
+		return new Result(null, Type.Void);
+	}
+
+	@Override
+	public Result visitVarDef(Expr.Var stmt) {
+		Result value = null;
 		if (stmt.initializer != null) {
 			value = evaluate(stmt.initializer);
 		}
-		if(value instanceof Type) {
-			environment.define(stmt.name.lexeme, null, (Type)value, true, stmt.isShared());
-		} else {
-			environment.define(stmt.name.lexeme, value, typeFromValue(value), true, stmt.isShared());
+		if(value == null) {
+			throw new InterpreterError("Missing initializer for var %s", stmt.name.lexeme);
 		}
-		return null;
+		if (value.value instanceof Type) {
+			value.type = (Type) value.value;
+		}
+		if(stmt.attributes.isOwn()) {
+			if(environment.topLevel().get(stmt.name.lexeme) == null) {
+				return environment.topLevel().define(stmt.name.lexeme, value, true, stmt.attributes.isPublic());
+			}
+			return value;
+		}
+		return environment.define(stmt.name.lexeme, value, true, stmt.attributes.isPublic());
 	}
 
 	@Override
-	public Object visitValDef(Expr.Val stmt) {
-		Object value = null;
+	public Result visitValDef(Expr.Val stmt) {
+		Result value = null;
 		if (stmt.initializer == null) {
-			return Mu.runtimeError("Val %s must be initialized!", stmt.name.lexeme);
+			throw new InterpreterError("Val %s must be initialized!", stmt.name.lexeme);
 		}
 		value = evaluate(stmt.initializer);
-		environment.define(stmt.name.lexeme, value, typeFromValue(value), false, stmt.isShared());
-		return null;
+		if(stmt.attributes.isOwn()) {
+			return environment.topLevel().define(stmt.name.lexeme, value, false, stmt.attributes.isPublic());		
+		}
+		return environment.define(stmt.name.lexeme, value, false, stmt.attributes.isPublic());
 	}
 
 	@Override
-	public Object visitVariableExpr(Expr.Variable expr) {
+	public Result visitVariableExpr(Expr.Variable expr) {
 		return environment.get(expr.name);
 	}
 
 	@Override
-	public Object visitLiteralExpr(Expr.Literal expr) {
+	public Result visitLiteralExpr(Expr.Literal expr) {
 		/* string interpolation */
+		Type type = typeFromValue(expr.value);
 		if (expr.value instanceof String) {
-			return interpolate((String) expr.value);
+			return new Result(interpolate((String) expr.value), type);
 		}
-		if(expr.value instanceof Double) {
-			// INF and NaN
-			
+		if (expr.value instanceof RString) {
+			return new Result(((RString) expr.value).string, Type.String);
 		}
-		return expr.value;
+		return new Result(expr.value, type);
 	}
 
 	@Override
-	public Object visitBinaryExpr(Expr.Binary expr) {
-		Object left = evaluate(expr.left);
+	public Result visitBinaryExpr(Expr.Binary expr) {
+		Result left = evaluate(expr.left);
+		expr.type = left.type;
 
 		/* START short circuit */
 		switch (soperator(expr.operator.type)) {
 		case AND:
-			/*
-			 * if Int -> bitwise AND else shortcircuit AND
-			 */
-			if (left instanceof Integer) {
-				return invoke(expr.type, "and", left, evaluate(expr.right));
-			} else {
-				if (isTruthy(expr.type, expr.left)) {
+			if (left.value == null || left.value instanceof Boolean /* || left.value intanceof Exception */) {
+				if (isTruthy(expr.type, expr.left, false)) {
 					return evaluate(expr.right);
 				} else {
 					return left;
 				}
+			} else {
+				return invoke("and", left, evaluate(expr.right));
 			}
 		case OR:
-			/*
-			 * if Int -> bitwise OR else shortcircuit OR
-			 */
-			if (left instanceof Integer) {
-				return invoke(expr.type, "or", left, evaluate(expr.right));
-			} else {
-				if (isTruthy(expr.type, expr.left)) {
+			if (left.value == null || left.value instanceof Boolean /* || left.value intanceof Exception */) {
+				if (isTruthy(expr.type, expr.left, false)) {
 					return left;
 				} else {
 					return evaluate(expr.right);
 				}
+			} else {
+				return invoke("or", left, evaluate(expr.right));
 			}
 		default:
 			break;
 		}
 		/* END short circuit */
 
-		Object right = evaluate(expr.right);
+		Result right = evaluate(expr.right);
 
 		switch (keyword(expr.operator.type)) {
 		case GCD:
-			return invoke(expr.type, "gcd", left, right);
+			return invoke("gcd", left, right);
 		case MAX:
-			return invoke(expr.type, "max", left, right);
+			return invoke("max", left, right);
 		case MIN:
-			return invoke(expr.type, "min", left, right);
+			return invoke("min", left, right);
+		case XOR:
+			return invoke("xor", left, right);
 		default:
 			break;
 
@@ -270,77 +302,93 @@ public class Interpreter implements Expr.Visitor<Object> {
 
 		switch (soperator(expr.operator.type)) {
 		case GREATER:
-			return invoke(expr.type, "gt", left, right);
+			return invoke("gt", left, right);
 
 		case GREATER_EQUAL:
-			return invoke(expr.type, "ge", left, right);
+			return invoke("ge", left, right);
 
 		case LESS:
-			return invoke(expr.type, "lt", left, right);
+			return invoke("lt", left, right);
 
 		case LESS_EQUAL:
-			return invoke(expr.type, "le", left, right);
+			return invoke("le", left, right);
 
 		case MINUS:
-			return invoke(expr.type, "minus", left, right);
+			return invoke("minus", left, right);
 
 		case SLASH:
-			return invoke(expr.type, "div", left, right);
+			return invoke("div", left, right);
 
 		case PERCENT:
-			return invoke(expr.type, "rem", left, right);
+			return invoke("rem", left, right);
 
 		case STAR:
-			return invoke(expr.type, "mul", left, right);
+			return invoke("mul", left, right);
 
 		case PLUS:
-			return invoke(expr.type, "plus", left, right);
+			return invoke("plus", left, right);
 
 		case NOT_EQUAL:
-			return invoke(expr.type, "neq", left, right);
+			return invoke("neq", left, right);
+			
+		case NEQEQ:
+			return invoke("neqeq", left, right);
 
 		case EQUAL:
-			return invoke(expr.type, "eq", left, right);
+			return invoke("eq", left, right);
+			
 		case EQEQ:
-			return invoke(expr.type, "eqeq", left, right);
+			return invoke("eqeq", left, right);
 
 		case POW:
-			return invoke(expr.type, "pow", left, right);
+			if(expr.type.equals(Type.Bool)) {
+				return invoke("xor", left, right);
+			}
+			return invoke("pow", left, right);
+
 		case LEFTSHIFT:
-			return invoke(expr.type, "lsh", left, right);
+			return invoke("lsh", left, right);
+		
 		case RIGHTSHIFT:
-			return invoke(expr.type, "rsh", left, right);
-		case XOR:
-			return invoke(expr.type, "xor", left, right);
+			return invoke("rsh", left, right);
 
 		default:
-			break;
+			return new Result(null, Type.Void);
 		}
-
-		// Unreachable.
-		return null;
 	}
 
-	@Override
-	public Object visitBlockExpr(Expr.Block expr) {
-		Environment env = new Environment(environment);
+	public Result executeBlock(List<Expr> body, Environment environment) {
+		Environment env = new Environment("block", environment);
 		Environment previous = this.environment;
 		try {
 			this.environment = env;
-
-			for (int i = 0; i < expr.expressions.size() - 1; i++) {
-				evaluate(expr.expressions.get(i));
+			Result value = null;
+			for (int i = 0; i < body.size(); i++) {
+				value = evaluate(body.get(i));
 			}
-			/* return value of last expression */
-			return evaluate(expr.last);
+			return value;
+		} catch(ReturnJump ret) {
+			throw ret;
+		} catch(MuException me) {
+			return new Result(me, Type.Exception);
+		} catch(InterpreterError ie) {
+			throw ie;
+		} catch(Exception e) {
+			throw new InterpreterError(e);
 		} finally {
 			this.environment = previous;
 		}
 	}
 
 	@Override
-	public Object visitUnaryExpr(Expr.Unary expr) {
-		Object right = evaluate(expr.right);
+	public Result visitBlockExpr(Expr.Block expr) {
+		return executeBlock(expr.expressions, environment);
+	}
+
+	@Override
+	public Result visitUnaryExpr(Expr.Unary expr) {
+		Result right = evaluate(expr.right);
+		expr.type = right.type;
 
 		switch (soperator(expr.operator.type)) {
 
@@ -354,10 +402,14 @@ public class Interpreter implements Expr.Visitor<Object> {
 			return invoke(expr.type, "not", right);
 
 		case PLUSPLUS:
-			return invoke(expr.type, "inc", right);
+			Result result = invoke(expr.type, "inc", right);
+			assign(((Expr.Variable) expr.right), result.value);
+			return result;
 
 		case MINMIN:
-			return invoke(expr.type, "dec", right);
+			result = invoke(expr.type, "dec", right);
+			assign(((Expr.Variable) expr.right), result.value);
+			return result;
 
 		case BACKSLASH:
 			return invoke(expr.type, "abs", right);
@@ -372,330 +424,721 @@ public class Interpreter implements Expr.Visitor<Object> {
 		case SQRT:
 			return invoke(expr.type, "sqrt", right);
 		default:
-			break;
+			return new Result(null, Type.Void);
 		}
-
-		// Unreachable.
-		return null;
 	}
 
 	@Override
-	public Object visitPostfixExpr(Expr.Postfix expr) {
+	public Result visitPostfixExpr(Expr.Postfix expr) {
 
-		Object left = evaluate(expr.left);
+		Result left = evaluate(expr.left);
+		expr.type = left.type;
 
 		switch (soperator(expr.operator.type)) {
 
 		case PLUSPLUS:
-			Object xx = invoke(expr.type, "inc", left);
-			assign(((Expr.Variable) expr.left), xx);
+			Result result = invoke(expr.type, "inc", left);
+			assign(((Expr.Variable) expr.left), result.value);
 			return left;
 
 		case MINMIN:
-			xx = invoke(expr.type, "dec", left);
-			assign(((Expr.Variable) expr.left), xx);
+			result = invoke(expr.type, "dec", left);
+			assign(((Expr.Variable) expr.left), result.value);
 			return left;
 
 		case BANG:
 			return invoke(expr.type, "fac", left);
 
 		default:
+			return new Result(null, Type.Void);
 		}
-
-		// Unreachable.
-		return null;
 	}
 
 	@Override
-	public Object visitAssignExpr(Assign expr) {
+	public Result visitAssignExpr(Assign expr) {
 
-		Object left = environment.get(expr.name.lexeme);
-		Object right = evaluate(expr.value);
-		Object value = right;
+		Result left = environment.get(expr.name.lexeme);
+		expr.type = left.type;
+		Result right = evaluate(expr.value);
+		Result value = right;
 
 		switch (soperator(expr.op.type)) {
 		case ASSIGN:
 			break;
 		case PLUSIS:
-			value = invoke(expr.type, "plus", left, right);
+			value = invoke("plus", left, right);
 			break;
 		case MINIS:
-			value = invoke(expr.type, "minus", left, right);
+			value = invoke("minus", left, right);
 			break;
 		case STARIS:
-			value = invoke(expr.type, "mul", left, right);
+			value = invoke("mul", left, right);
 			break;
 		case SLASHIS:
-			value = invoke(expr.type, "div", left, right);
+			value = invoke("div", left, right);
 			break;
 		case PERCENTIS:
-			value = invoke(expr.type, "rem", left, right);
+			value = invoke("rem", left, right);
 			break;
 		case POWIS:
-			value = invoke(expr.type, "pow", left, right);
+			if(expr.type.equals(Type.Bool)) {				
+				value = invoke("xor", left, right);
+			} else {
+				value = invoke("pow", left, right);
+			}
 			break;
 		case ANDIS:
-			value = invoke(expr.type, "and", left, right);
+			value = invoke("and", left, right);
 			break;
 		case ORIS:
-			value = invoke(expr.type, "or", left, right);
+			value = invoke("or", left, right);
 			break;
 		case LSHIFTIS:
-			value = invoke(expr.type, "ls", left, right);
+			value = invoke("lsh", left, right);
 			break;
 		case RSHIFTIS:
-			value = invoke(expr.type, "rs", left, right);
+			value = invoke("rsh", left, right);
 			break;
 		default:
 			break;
 		}
-		assign(expr, value);
+		assign(expr, value.value);
 		return value;
 	}
 
 	@Override
-	public Object visitWhileExpr(Expr.While stmt) {
-		while (isTruthy(stmt.condition.type, stmt.condition)) {
-			try {
-				evaluate(stmt.body);
-			} catch (BreakJump breakJump) {
-				break;
-			} catch (ContinueJump continueJump) {
-				// Do nothing.
-			}
-		}
-		return null;
-	}
-
-	@Override
-	public Object visitIfExpr(Expr.If stmt) {
-		if (isTruthy(stmt.condition.type, stmt.condition)) {
+	public Result visitIfExpr(Expr.If stmt) {
+		if (isTruthy(stmt.condition.type, stmt.condition, stmt.invert)) {
 			return evaluate(stmt.thenBranch);
-		} else if (stmt.elseBranch != null) {
+		}		
+		if (stmt.elseBranch != null) {
 			return evaluate(stmt.elseBranch);
 		} else {
-			return null;
+			return new Result(null, Type.Void);
 		}
 	}
 
 	@Override
-	public Object visitSelectExpr(Expr.Select stmt) {
-		Object zwitch = evaluate(stmt.condition);
-		for(Pair<Expr, Expr> when : zip(stmt.whenExpressions, stmt.whenBranches)) {
-			if(evaluate(when.left).equals(zwitch)) {
+	public Result visitSelectExpr(Expr.Select stmt) {
+		Result zwitch = evaluate(stmt.condition);
+		for (Pair<Expr, Expr> when : zip(stmt.whenExpressions, stmt.whenBranches)) {
+			if (evaluate(when.left).equals(zwitch)) {
 				return evaluate(when.right);
 			}
-		} 
+		}
 		if (stmt.elseBranch != null) {
 			return evaluate(stmt.elseBranch);
 		}
-		return null;
+		return new Result(null, Type.Void);
 	}
 
 	public static <A, B> List<Pair<A, B>> zip(List<A> listA, List<B> listB) {
-	    if (listA.size() != listB.size()) {
-	        throw new IllegalArgumentException("Lists must have same size");
-	    }
-	    List<Pair<A, B>> pairList = new LinkedList<>();
-	    for (int index = 0; index < listA.size(); index++) {
-	        pairList.add(new Pair<>(listA.get(index), listB.get(index), false));
-	    }
-	    return pairList;
+		if (listA.size() != listB.size()) {
+			throw new InterpreterError("Lists must have same size");
+		}
+		List<Pair<A, B>> pairList = new LinkedList<>();
+		for (int index = 0; index < listA.size(); index++) {
+			pairList.add(new Pair<>(listA.get(index), listB.get(index)));
+		}
+		return pairList;
 	}
-	
-	@Override
-	public Object visitForExpr(For expr) {
-		Environment env = new Environment(environment);
-		@SuppressWarnings("unchecked")
-		List<Object> values = (List<Object>) evaluate(expr.range);
-		Type type = typeFromValue(values.get(0));
-		env.define(expr.var.name.lexeme, values.get(0), typeFromValue(values.get(0)), true, false);
 
-		for (int i = 0; i < values.size(); i++) {
+	@Override
+	public Result visitWhileExpr(Expr.While stmt) {
+		List<Object> list = new ArrayList<>();
+		Type returnType = Type.None;
+		while (isTruthy(stmt.condition.type, stmt.condition, stmt.invert)) {
 			try {
-				env.assign(expr.var.name, values.get(i), type);
-				executeBlock(expr.body.expressions, env);
+				Result result = evaluate(stmt.body);
+				if (result.value != null) {
+					list.add(result.value);
+					returnType = result.type;
+				}
 			} catch (BreakJump breakJump) {
-				break;
+				return new Result(list, new Type.ListType(returnType));
 			} catch (ContinueJump continueJump) {
 				// Do nothing.
+			} catch(MuException e) {
+				return new Result(e, Type.Exception);
 			}
 		}
-		return null;
+		if(stmt.atEnd != null) {
+			return evaluate(stmt.atEnd);
+		}
+		return new Result(list, new Type.ListType(returnType));
+	}
+
+	@SuppressWarnings("unchecked")
+	@Override
+	public Result visitForExpr(For expr) {
+		Environment env = new Environment("for", environment);
+		Result res = evaluate(expr.range);
+		List<Object> values = new ArrayList<>();
+		Type type = Type.Any;
+		if (res.value instanceof List) {
+			values = (List<Object>) res.value;
+			type = ((ListType) res.type).eltType;
+		} else if (res.value instanceof Set) {
+			values = new ArrayList<>((Set<Object>) res.value);
+			type = ((SetType) res.type).eltType;
+		} else if (res.value instanceof Map) {
+			values = new ArrayList<>(((Map<String, Object>) res.value).entrySet());
+			type = new Type.MapType(Type.String, Type.Any);
+		} else if (res.value instanceof Callee) {
+			Callee pat = (Callee) res.value;
+			Map<String, Object> map = new HashMap<>();
+			for (Entry<String, Result> param : pat.interfaces.entrySet()) {
+				if(param.getValue().value instanceof Property) {
+					Property prop = (Property)param.getValue().value;
+					prop = prop.mkGetter();
+					map.put(param.getKey(), call(param.getValue(), new Result(new ListMap<>(), prop.returnType)).value);
+				} else {
+					map.put(param.getKey(), param.getValue().value);
+				}
+			}
+			values = new ArrayList<>(map.entrySet());
+			type = new Type.MapType(Type.String, Type.Any);
+		} else if (res.value instanceof Template) {
+			Template pat = (Template) res.value;
+			Map<String, Object> map = new HashMap<>();
+			for (Entry<String, Result> param : pat.interfaces.entrySet()) {
+				map.put(param.getKey(), param.getValue().value);
+			}
+			values = new ArrayList<>(map.entrySet());
+			type = new Type.MapType(Type.String, Type.Any);
+		}
+		env.define(expr.var.name.lexeme, new Result(values.get(0), typeFromValue(values.get(0))), true, false);
+
+		List<Object> list = new ArrayList<>();
+		Type returnType = Type.None;
+		for (int i = 0; i < values.size(); i++) {
+			try {
+				env.assign(expr.var.name, new Result(values.get(i), type));
+				Result value = executeBlock(expr.body.expressions, env);
+				if (value.value != null) {
+					list.add(value.value);
+					returnType = value.type;
+				}
+			} catch (BreakJump breakJump) {
+				return new Result(list, new Type.ListType(returnType));
+			} catch (ContinueJump continueJump) {
+				// Do nothing.
+			} catch(MuException me) {
+				return new Result(me, Type.Exception);
+			}
+		}
+		if(expr.atEnd != null) {
+			// if no break encountered, do this:
+			return evaluate(expr.atEnd);
+		}
+		return new Result(list, new Type.ListType(returnType));
 	}
 
 	@Override
-	public Object visitReturnExpr(Expr.Return stmt) {
-		Object value = null;
+	public Result visitReturnExpr(Expr.Return stmt) {
+		Result value = null;
 		if (stmt.value != null)
 			value = evaluate(stmt.value);
-		throw new MuReturn(value);
+		throw new ReturnJump(value);
 	}
 
 	@Override
-	public Object visitModuleDef(Expr.Module stmt) {
+	public Result visitAopExpr(Expr.Aop stmt) {
+		Result callable = evaluate(stmt.callable);
+		if(callable.value instanceof Template) {
+			Template tmpl = (Template)callable.value;
+			switch(stmt.name.lexeme.toLowerCase()) {
+			case "around":
+				tmpl.arounds.push(stmt.block);
+				break;
+			case "before":
+				tmpl.befores.push(stmt.block);
+				break;
+			case "after":
+				tmpl.afters.push(stmt.block);
+				break;
+			case "error":
+				tmpl.errors.push(stmt.block);
+				break;
+			case "always":
+				tmpl.alwayses.push(stmt.block);
+				break;
+			}
+		}
+		return new Result(null, Type.Void);
+	}
+
+	@Override
+	public Result visitThrowExpr(Expr.Throw stmt) {
+		Result exception = evaluate(stmt.thrown);
+		throw new MuException(exception);
+	}
+
+	@Override
+	public Result visitModuleDef(Expr.Module stmt) {
 		// TODO
 		moduleName = stmt.name.lexeme;
-		return null;
+		return new Result(null, Type.Void);
 	}
 
 	@Override
-	public Object visitSetExpr(Expr.Set set) {
+	public Result visitSetExpr(Expr.Set set) {
 		Set<Object> result = new HashSet<>();
+		Type eltType = Type.Any;
 		for (Expr expr : set.exprs) {
-			result.add(evaluate(expr));
+			Result r = evaluate(expr);
+			if (eltType.equals(Type.Any)) {
+				eltType = r.type;
+				result.add(r.value);
+			} else {
+				if (r.type.equals(eltType)) {
+					result.add(r.value);
+				} else {
+					throw new InterpreterError("Type error: set eltType = %s, value type %s", eltType, r.type);
+				}
+			}
 		}
-		return result;
+		return new Result(result, new Type.SetType(eltType));
 	}
 
 	@Override
-	public Object visitRangeExpr(Expr.Range rng) {
+	public Result visitRangeExpr(Expr.Range rng) {
 		List<Object> result = new ArrayList<>();
-		Object start = evaluate(rng.start);
+		Result start = evaluate(rng.start);
+		Type eltType = Type.Any;
 		// Int
-		if (start instanceof BigInteger) {
-			BigInteger st = (BigInteger) start;
+		if (start.value instanceof BigInteger) {
+			eltType = Type.Int;
+			BigInteger st = (BigInteger) start.value;
 			if (!rng.startIncl)
 				st = st.add(BigInteger.ONE);
-			BigInteger end = ((BigInteger) evaluate(rng.end));
+			BigInteger end = ((BigInteger) evaluate(rng.end).value);
 			if (rng.endIncl)
 				end = end.add(BigInteger.ONE);
 
-			if(st.isNaN() || end.isNaN()) {
-				return null;
+			if (st.isNaN() || end.isNaN()) {
+				return new Result(null, Type.Void);
 			}
-			if(st.isNegativeInfinity() || end.isPositiveInfinity()) {
+			if (st.isNegativeInfinity() || st.isPositiveInfinity()) {
+				return new Result(null, Type.Void);
+			}
+			if (end.isNegativeInfinity() || end.isPositiveInfinity()) {
 				// do not evaluate!!
-				return rng;
+				return new Result(rng, new Type.Range("Range", rng.start, rng.end));
 			}
-
-			for (int i = st.intValue(); i < end.intValue(); i++) {
-				result.add(Integer.valueOf(i));
+			if (end.intValue() < st.intValue()) {
+				for (int i = end.intValue(); i >= st.intValue(); i--) {
+					result.add(BigInteger.valueOf(i));
+				}
+			} else {
+				for (int i = st.intValue(); i < end.intValue(); i++) {
+					result.add(BigInteger.valueOf(i));
+				}
 			}
 		}
 		// Char
-		if (start instanceof Integer) {
-			int st = (Integer) start;
+		if (start.value instanceof Integer) {
+			eltType = Type.Char;
+			int st = (Integer) start.value;
 			if (!rng.startIncl)
 				++st;
-			int end = ((Integer) evaluate(rng.end));
+			int end = ((Integer) evaluate(rng.end).value);
 			if (rng.endIncl)
 				++end;
-
-			for (int i = st; i < end; i++) {
-				result.add(Integer.valueOf(i));
+			if(end < st) {
+				for (int i = end; i >= st; i--) {
+					result.add(Integer.valueOf(i));
+				}				
+			} else {
+				for (int i = st; i < end; i++) {
+					result.add(Integer.valueOf(i));
+				}
 			}
 		}
-		return result;
+		return new Result(result, new Type.ListType(eltType));
 	}
 
 	@Override
-	public Object visitMappingExpr(Mapping expr) {
+	public Result visitMappingExpr(Mapping expr) {
 		return evaluate(expr.value);
 	}
 
 	@Override
-	public Object visitSeqExpr(Expr.Seq lst) {
-		// OR IS IT A SUBSCRIPT???
+	public Result visitSeqExpr(Expr.Seq lst) {
 		List<Object> result = new ArrayList<>();
+		Type eltType = Type.Any;
 		for (Expr expr : lst.exprs) {
-			result.add(evaluate(expr));
-		}
-		return result;
-	}
-
-	@Override
-	public Object visitMapExpr(Expr.Map map) {
-		// OR IS IT A FUNCTION CALL??
-		ListMap<Object> listmap = new ListMap<>();
-		for (Expr expr : map.mappings) {
-			Object value = evaluate(expr);
-			if (expr instanceof Expr.Mapping) {
-				Expr.Mapping entry = (Expr.Mapping) expr;
-				// mutable true, shared false ??
-				environment.define(entry.key, value, typeFromValue(value), true, false);
-				listmap.put(entry.key, value);
+			Result r = evaluate(expr);
+			if (eltType.equals(Type.Any)) {
+				eltType = r.type;
+				result.add(r.value);
 			} else {
-				listmap.put(null, value);
+				if (r.type.equals(eltType)) {
+					result.add(r.value);
+				} else {
+					throw new InterpreterError("Type error: set eltType = %s, value type %s", eltType, r.type);
+				}
 			}
 		}
-		return listmap;
+		return new Result(result, new Type.ListType(eltType));
 	}
 
 	@Override
-	public Object visitClassDef(Expr.ClassDef stmt) {
-		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
-		return null;
-	}
-	@Override
-	public Object visitFuncDef(Expr.FuncDef stmt) {
-		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
-		return null;
+	public Result visitMapExpr(Expr.Map map) {
+		return doMap(map);
 	}
 
-	@Override
-	public Object visitInterfaceDef(InterfaceDef stmt) {
-		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
-		return null;
+	Result doMap(Expr.Map map) {
+		ListMap<Object> listmap = new ListMap<>();
+
+		for (Expr expr : map.mappings) {
+			Result value = evaluate(expr);
+			if (expr instanceof Expr.Mapping) {
+				Expr.Mapping entry = (Expr.Mapping) expr;
+				// mutable true, public false ??
+				// environment.define(entry.key, value, true, false);
+				listmap.put(entry.key, value.value);
+			} else {
+				listmap.put(null, value.value);
+			}
+		}
+		return new Result(listmap, new Type.MapType(Type.String, Type.Any));
 	}
 
-	@Override
-	public Object visitIterDef(IterDef stmt) {
-		environment.define(stmt.name.lexeme, stmt, new Type.SignatureType(stmt), false, true);
-		return null;
+	public Result visitCallExpr(Call expr) {
+		Result res = evaluate(expr.current);
+		if (res.type instanceof SignatureType)
+			return call(res, evaluate(expr.next));
+		else
+			return evaluate(expr.next);
+	}
+
+	public Result visitDotExpr(Dot expr) {
+		Result res = evaluate(expr.current);
+		if (res.value instanceof Template || res.value instanceof Map || res.value instanceof Map.Entry || res.value instanceof Callee) {
+			if (expr.value != null) {
+				return setdot(res, ((Expr.Variable) expr.next).name.lexeme, evaluate(expr.value).value);
+			}
+			return dot(res, ((Expr.Variable) expr.next).name.lexeme);
+		} else {
+			return evaluate(expr.next);
+		}
+	}
+
+	public Result visitSubscriptExpr(Subscript expr) {
+		Result res = evaluate(expr.seq);
+		if (expr.sub instanceof Expr.Range) {
+			return sublist(res, (Expr.Range) expr.sub);
+		}
+		if (res.value instanceof Set) {
+			throw new InterpreterError("Cannot subscript a set");
+		}
+		if (res.value instanceof List || res.value instanceof Map)
+			return subscript(res, (Seq)expr.sub, expr.value);
+		else
+			return evaluate(expr.sub);
+	}
+
+	private Result sublist(Result seq, Expr.Range range) {
+		int start = ((BigInteger)evaluate(range.start).value).intValue();
+		int end = ((BigInteger) evaluate(range.end).value).intValue();
+		if (seq.value instanceof List) {
+			@SuppressWarnings("unchecked")
+			List<Object> list = (List<Object>) seq.value;
+			List<Object> subList = list.subList(start, end);
+			return new Result(subList, typeFromValue(seq.value));
+		}
+		return new Result(null, Type.Void);
 	}
 
 	@SuppressWarnings("unchecked")
-	@Override
-	public Object visitGetterExpr(Getter expr) {
-		Object obj = evaluate(expr.object);
-		if(obj instanceof ListMap) {
-			return ((ListMap<Object>)obj).get(expr.name.lexeme);
+	private Result call(Result func, Result actuals) {
+		if(func.value instanceof Property) {
+			return Property.call((Property)func.value, this, (ListMap<Object>) actuals.value);			
 		}
-		return null;
+		return Template.call((Template)func.value, this, (ListMap<Object>) actuals.value);
 	}
 
 	@SuppressWarnings("unchecked")
-	@Override
-	public Object visitSetterExpr(Setter expr) {
-		Object obj = evaluate(expr.object);
-		if(obj instanceof ListMap) {
-			return ((ListMap<Object>)obj).put(expr.name.lexeme, evaluate(expr.value));
+	private Result subscript(Result listMap, Seq index, Expr value) {
+		Result sub = evaluate(index.exprs.get(0));
+		if(value != null) {
+			Object val = evaluate(value).value;
+			/* setter */
+			if (listMap.value instanceof Map) {
+				String key = (String)sub.value;
+				Map<String, Object> map = (Map<String, Object>)listMap.value;
+				if(map.containsKey(key)) {
+					map.put(key, val);
+				} else {
+					throw new InterpreterError("No such key: %s", key);
+				}
+			}
+			if (listMap.value instanceof List) {
+				List<Object> list = ((List<Object>) listMap.value);
+				int ix = ((BigInteger) sub.value).intValue();
+				if(ix < 0) ix = list.size() + ix;
+				list.set(ix, val);
+			}
+			return new Result(null, Type.Void);
+		} else {
+			/* getter */
+			if (listMap.value instanceof Map) {
+				String key = (String)sub.value;
+				Map<String, Object> map = (Map<String, Object>)listMap.value;
+				if(map.containsKey(key)) {
+					Object val = map.get(key);
+					return new Result(val, typeFromValue(val));
+				} else {
+					throw new InterpreterError("No such key: %s", key);
+				}
+			}
+			if (listMap.value instanceof List) {
+				List<Object> list = (List<Object>)listMap.value;
+				int ix = ((BigInteger) sub.value).intValue();
+				if(ix < 0) ix = list.size() + ix;
+				Object val = list.get(ix);
+				return new Result(val, typeFromValue(val));
+			}
+			return new Result(null, Type.Void);
 		}
-		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	private Result dot(Result listMap, String key) {
+		if (listMap.value instanceof Map) {
+			Object value = ((Map<String, Object>) listMap.value).get(key);
+			return new Result(value, typeFromValue(value));
+		}
+		if (listMap.value instanceof Map.Entry) {
+			Object value = ((Map.Entry<?, ?>) listMap.value).getValue();
+			return new Result(value, typeFromValue(value));
+		}
+		if (listMap.value instanceof Template) {
+			// call getter
+			Template tmpl = (Template)listMap.value;
+			Result res = tmpl.interfaces.get(key);
+			if(res == null) {
+				throw new InterpreterError("Undefined variable %s.", key);
+			}
+			if(res.value instanceof Property) {
+				res.value = ((Property)res.value).mkGetter();
+				return call(res, new Result(new ListMap<>(), Type.Any));
+			}
+			if(res.value instanceof Template) {
+				return call(res, new Result(new ListMap<>(), Type.Any));
+			}
+		}
+		if (listMap.value instanceof Callee) {
+			Callee callee = (Callee)listMap.value;
+			Result res = callee.interfaces.get(key);
+			if(res.value instanceof Property) {
+				res.value = ((Property)res.value).mkGetter();
+				return call(res, new Result(new ListMap<>(), Type.Any));
+			}
+			if(res.value instanceof Template) {
+				return call(res, new Result(new ListMap<>(), Type.Any));
+			}
+		}
+		return new Result(null, Type.Void);
+	}
+
+	@SuppressWarnings("unchecked")
+	private Result setdot(Result listMap, String key, Object value) {
+		if (listMap.value instanceof Map) {
+			((Map<String, Object>) listMap.value).put(key, value);
+			return new Result(value, typeFromValue(value));
+		}
+		if (listMap.value instanceof Map.Entry) {
+			((Map.Entry<String, Object>) listMap.value).setValue(value);
+			return new Result(value, typeFromValue(value));
+		}
+		if (listMap.value instanceof Template) {
+			// call setter
+			Template tmpl = (Template)listMap.value;
+			Result res = tmpl.interfaces.get(key);
+			if(res.value instanceof Property) {
+				ListMap<Object> params = new ListMap<>();
+				params.put("value", value);
+				res.value = ((Property)res.value).mkSetter(value);
+				return call(res, new Result(params, Type.Any));
+			}
+		}
+		if (listMap.value instanceof Callee) {
+			// call setter
+			Callee callee = (Callee)listMap.value;
+			Result res = callee.interfaces.get(key);
+			if(res.value instanceof Property) {
+				ListMap<Object> params = new ListMap<>();
+				params.put("value", value);
+				res.value = ((Property)res.value).mkSetter(value);
+				return call(res, new Result(params, Type.Any));
+			}
+		}
+		return new Result(null, Type.Void);
 	}
 
 	@Override
-	public Object visitThisExpr(This expr) {
-		// TODO Auto-generated method stub
-		return null;
+	public Result visitTemplateDef(Expr.TemplateDef stmt) {
+		Template tmpl = new Template(stmt, environment.capture(stmt.name.lexeme));
+		Result res = environment.define(stmt.name.lexeme, new Result(tmpl, new Type.SignatureType(stmt)), false, true);
+		tmpl.closure.define(stmt.name.lexeme, new Result(tmpl, new Type.SignatureType(stmt)), false, true);
+		
+		// define all declarations inside templatedef interface
+		for(Expr expr : tmpl.body.expressions) {
+			
+			/* non-local nested functions and classes */
+			if(expr instanceof Expr.TemplateDef) {
+				TemplateDef def = (TemplateDef)expr;
+				if(def.attributes.isPublic()) {
+					Template p = new Template(def, tmpl.closure);
+					tmpl.interfaces.put(def.name.lexeme, new Result(p, new Type.SignatureType(def)));
+					tmpl.closure.define(def.name.lexeme, new Result(p, new Type.SignatureType(def)), false, true);
+				}
+			}
+			
+			/* non-local typedefs */
+			if(expr instanceof Expr.TypeDef) {
+				TypeDef def = (TypeDef)expr;
+				if(def.attributes.isPublic()) {
+					tmpl.interfaces.put(def.name.lexeme, new Result(def.literal, Type.Type));
+					tmpl.closure.define(def.name.lexeme, new Result(def.literal, Type.Type), false, true);
+					// define SetEnum or ListEnum literals
+					if(def.type instanceof Type.ListEnum) {
+						for(Object val : ((Type.ListEnum)def.type).values) {
+							tmpl.interfaces.put(val.toString(), new Result(val.toString(), def.type));
+							tmpl.closure.define(val.toString(), new Result(val.toString(), def.type), false, true);
+						}
+					}
+					if(def.type instanceof Type.SetEnum) {
+						for(Object val : ((Type.SetEnum)def.type).values) {
+							tmpl.interfaces.put(val.toString(), new Result(val.toString(), def.type));
+							tmpl.closure.define(val.toString(), new Result(val.toString(), def.type), false, true);
+						}						
+					}
+				}
+			}
+			
+			/* own [class] immutable properties */
+			if(expr instanceof Expr.Val) {
+				Val def = (Val)expr;
+				if(def.attributes.isOwn()) {
+					if(tmpl.closure.get(def.name.lexeme) != null) {
+						throw new InterpreterError("Name %s already defined.", def.name.lexeme);
+					}
+					executeBlock(List.of(expr), tmpl.closure);
+					if(def.attributes.isProp()) {
+						// getter
+						tmpl.interfaces.put(def.name.lexeme, new Result(new Property(def.name, def.type, tmpl.closure), def.type));
+					}
+				}
+			}
+
+			/* own [class] mutable properties */
+			if(expr instanceof Expr.Var) {
+				Var def = (Var)expr;
+				// getter & setter
+				if(def.attributes.isOwn()) {
+					if(tmpl.closure.get(def.name.lexeme) != null) {
+						throw new InterpreterError("Name %s already defined.", def.name.lexeme);
+					}
+					executeBlock(List.of(expr), tmpl.closure);
+					if(def.attributes.isProp()) {
+						Property prop = new Property(def.name, def.type, tmpl.closure);
+						tmpl.interfaces.put(def.name.lexeme, new Result(prop, def.type));						
+					}
+				}
+			}
+		}		
+		return res;
 	}
 
 	@Override
-    public Object visitBreakExpr(Expr.Break stmt) {
-        throw new BreakJump();
-    }
+	public Result visitBreakExpr(Expr.Break stmt) {
+		throw new BreakJump();
+	}
 
-    @Override
-    public Object visitContinueExpr(Expr.Continue stmt) {
-        throw new ContinueJump();
-    }
-    
-    @Override
-	public Object visitTypeLiteralExpr(Expr.TypeLiteral expr) {
-		if(expr.name != null)
-			environment.define(expr.name.lexeme, expr.literal, new Type("Type"), false, expr.isShared());
-		return expr.literal;
+	@Override
+	public Result visitContinueExpr(Expr.Continue stmt) {
+		throw new ContinueJump();
+	}
+
+	@Override
+	public Result visitTypeLiteralExpr(Expr.TypeLiteral expr) {
+		return new Result(expr.literal, Type.Type);
+	}
+
+	@Override
+	public Result visitTypeDefExpr(Expr.TypeDef expr) {
+		if (expr.name != null) {
+			environment.define(expr.name.lexeme, new Result(expr.literal, Type.Type), false, expr.attributes.isPublic());
+			
+			// CHECKME
+			if(expr.type instanceof Type.ListEnum) {
+				for(Object val : ((Type.ListEnum)expr.type).values) {
+					environment.define(val.toString(), new Result(val.toString(), expr.type), false, expr.attributes.isPublic());
+				}
+			}
+			if(expr.type instanceof Type.SetEnum) {
+				for(Object val : ((Type.SetEnum)expr.type).values) {
+					environment.define(val.toString(), new Result(val.toString(), expr.type), false, expr.attributes.isPublic());
+				}						
+			}
+		}
+		return new Result(null, Type.Void);
 	}
 
 	/* UTIL */
+
+	static Type typeFromClass(Class<?> clz) {
+		/* We have char, string, int, real, bool */
+		if (clz.equals(Void.class))
+			return Type.Void;
+		if (clz.equals(Integer.class) || clz.equals(int.class))
+			return Type.Char;
+		if (clz.equals(String.class))
+			return Type.String;
+		if (clz.equals(RString.class))
+			return Type.String;
+		if (clz.equals(BigInteger.class))
+			return Type.Int;
+		if (clz.equals(Double.class) || clz.equals(double.class))
+			return Type.Real;
+		if (clz.equals(Boolean.class) || clz.equals(boolean.class))
+			return Type.Bool;
+
+		/*
+		 * if (clz.equals(Expr.ClassDef.class)) return new Type.SignatureType((ClassDef)
+		 * val); if (clz.equals(Expr.FuncDef.class)) return new
+		 * Type.SignatureType((FuncDef) val);
+		 */
+
+		if (clz.isAssignableFrom(java.util.List.class)) {
+			return new Type.ListType(Type.Any);
+		}
+		if (clz.isAssignableFrom(java.util.Set.class)) {
+			return new Type.SetType(Type.Any);
+		}
+		if (clz.isAssignableFrom(java.util.Map.class)) {
+			return new Type.MapType(Type.String, Type.Any);
+		}
+		if (clz.isAssignableFrom(Map.Entry.class)) {
+			return new Type.MapType(Type.String, Type.Any);
+		}
+		System.err.println("Type is " + clz);
+		return Type.None;
+	}
+
 	public static Type typeFromValue(Object val) {
+
 		/* We have char, string, int, real, bool */
 		if (val == null)
 			return Type.Void;
 		if (val instanceof Integer)
 			return Type.Char;
 		if (val instanceof String)
+			return Type.String;
+		if (val instanceof RString)
 			return Type.String;
 		if (val instanceof BigInteger)
 			return Type.Int;
@@ -704,68 +1147,87 @@ public class Interpreter implements Expr.Visitor<Object> {
 		if (val instanceof Boolean)
 			return Type.Bool;
 
-		if (val instanceof Expr.ClassDef)
-			return new Type.SignatureType((ClassDef)val);
-		if (val instanceof Expr.InterfaceDef)
-			return new Type.SignatureType((InterfaceDef)val);
-		if (val instanceof Expr.IterDef)
-			return new Type.SignatureType((IterDef)val);
-		if (val instanceof Expr.FuncDef)
-			return new Type.SignatureType((FuncDef)val);
-		
+		if (val instanceof Expr.TemplateDef)
+			return new Type.SignatureType((TemplateDef) val);
+
 		if (val instanceof java.util.List) {
 			@SuppressWarnings("unchecked")
 			List<Object> list = (List<Object>) val;
-			if(!list.isEmpty()) {
+			if (!list.isEmpty()) {
 				return new Type.ListType(typeFromValue(list.get(0)));
 			}
 		}
 		if (val instanceof java.util.Set) {
 			@SuppressWarnings("unchecked")
 			Set<Object> set = (Set<Object>) val;
-			if(!set.isEmpty()) {
+			if (!set.isEmpty()) {
 				return new Type.SetType(typeFromValue(set.iterator().next()));
 			}
 		}
-		return new Type("None");
+		if (val instanceof java.util.Map) {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> set = (Map<String, Object>) val;
+			if (!set.isEmpty()) {
+				return new Type.MapType(Type.String, Type.Any);
+			}
+		}
+		if (val instanceof Map.Entry) {
+			return new Type.MapType(Type.String, Type.Any);
+		}
+		if (val instanceof Template) {
+			return new Type.SignatureType((TemplateDef) ((Template) val).def);
+		}
+		if (val instanceof Callee) {
+			return new Type.SignatureType((TemplateDef) ((Callee) val).def);
+		}
+		System.err.println("Type is " + val.getClass());
+		return Type.None;
 	}
 
 	@SuppressWarnings("unchecked")
-	private String stringify(Object object) {
-		if (object == null)
+	private String stringify(Result obj) {
+		if (obj == null || obj.value == null)
 			return "nil";
-		if (object instanceof Integer) {
-			return "'" + new String(Character.toChars((Integer) object)) + "'";
+		if (obj.value instanceof Integer) {
+			return "'" + new String(Character.toChars((Integer) obj.value)) + "'";
 		}
-		if (object instanceof String) {
-			return "\"" + object + "\"";
+		if (obj.value instanceof String) {
+			return "\"" + obj.value + "\"";
 		}
-		if (object instanceof Collection) {
-			return stringifyCollection((Collection<Object>) object);
+		if (obj.value instanceof Collection) {
+			return stringifyCollection((Collection<Object>) obj.value);
 		}
-		if (object instanceof Map) {
-			return stringifyMap((Map<String, Object>) object);
+		if (obj.value instanceof Map) {
+			return stringifyMap((Map<String, Object>) obj.value);
 		}
-		return object.toString();
+		return obj.value.toString();
+	}
+
+	private String stringifyType(Result obj) {
+		if (obj == null || obj.value == null)
+			return "Void";
+		return obj.type.toString();
 	}
 
 	private String unquote(String s) {
 		int ix = 0;
-		if(s.startsWith("\"")) ix = 1;
+		if (s.startsWith("\""))
+			ix = 1;
 		int ixEnd = s.length();
-		if(s.endsWith("\"")) ixEnd -= 1;
+		if (s.endsWith("\""))
+			ixEnd -= 1;
 		return s.substring(ix, ixEnd);
 	}
-	
+
 	private String stringifyCollection(Collection<Object> collection) {
 		StringBuilder sb = new StringBuilder();
 		char bracket = (collection instanceof Set) ? '{' : '[';
 		sb.append(bracket);
 		for (Object o : collection) {
 			if (sb.length() > 1) {
-				sb.append(",");
+				sb.append(", ");
 			}
-			sb.append(stringify(o));
+			sb.append(stringify(new Result(o, Type.Any)));
 		}
 		sb.append(bracket == '{' ? '}' : ']');
 		return sb.toString();
@@ -776,9 +1238,9 @@ public class Interpreter implements Expr.Visitor<Object> {
 		sb.append("(");
 		for (Entry<String, Object> entry : map.entrySet()) {
 			if (sb.length() > 1) {
-				sb.append(",");
+				sb.append(", ");
 			}
-			sb.append(entry.getKey()).append(":").append(stringify(entry.getValue()));
+			sb.append(entry.getKey()).append(" → ").append(stringify(new Result(entry.getValue(), Type.Any)));
 		}
 		sb.append(")");
 		return sb.toString();
@@ -787,17 +1249,17 @@ public class Interpreter implements Expr.Visitor<Object> {
 	private String interpolate(String string) {
 		StringBuilder sb = new StringBuilder();
 		int ix1 = string.indexOf("#{");
-		int ix2 = string.indexOf('}');
+		int ix2 = string.indexOf('}', ix1);
 		if (ix1 >= 0 && ix2 > ix1) {
 			String name = string.substring(ix1 + 2, ix2);
 			String pre = string.substring(0, ix1);
 			String post = string.substring(ix2 + 1);
-			Expr expr = Mu.eval(name);
-			Object subst = evaluate(expr);
-			if (subst == null) {
+			Expr expr = Mu.parse(name);
+			if(expr == null) {
 				return sb.append(string.substring(0, ix2 + 1)).append(interpolate(post)).toString();
 			} else {
-				sb.append(pre).append(subst);
+				Result subst = evaluate(expr);
+				sb.append(pre).append(subst.value);
 				return sb.append(interpolate(post)).toString();
 			}
 		} else {
@@ -805,9 +1267,39 @@ public class Interpreter implements Expr.Visitor<Object> {
 		}
 	}
 
-	boolean isTruthy(Type type, Expr expr) {
-		Object condition = evaluate(expr);
-		return (boolean) invoke(type, "isTrue", condition);
+	boolean isTruthy(Type type, Expr expr, boolean invert) {
+		return invert ? !isTruthy(type, expr) : isTruthy(type, expr);
+	}
+	
+	@SuppressWarnings("unchecked")
+	boolean isTruthy(Type type, Expr expr) { 
+		Result condition = evaluate(expr);
+		if(condition.value == null) {
+			return false;
+		}
+		if(condition.value instanceof MuException) {
+			return false;
+		}
+		if(condition.value instanceof Boolean) {
+			return (Boolean)condition.value;
+		}
+		if(condition.value instanceof String) {
+			String s = (String) condition.value;
+			return !s.isEmpty();
+		}
+		if(condition.value instanceof List) {
+			List<Object> list = (List<Object>) condition.value;
+			return !list.isEmpty();
+		}
+		if(condition.value instanceof Set) {
+			Set<Object> set = (Set<Object>) condition.value;
+			return !set.isEmpty();
+		}
+		if(condition.value instanceof Map) {
+			Map<String, Object> map = (Map<String, Object>) condition.value;
+			return !map.isEmpty();
+		}
+		return true;
 	}
 
 	Soperator soperator(TokenType type) {
@@ -821,4 +1313,5 @@ public class Interpreter implements Expr.Visitor<Object> {
 			return (Keyword) type;
 		return Keyword.NONE;
 	}
+
 }

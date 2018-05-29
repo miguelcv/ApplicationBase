@@ -21,7 +21,6 @@ apply from: "${project.localPluginsUrl}/default.gradle"
 
 dependencies {
 	compile libs.jsoup
-	compile "com.github.tomtung:latex2unicode_2.12:0.2.4"
 }
 
 apply from: "${project.localPluginsUrl}/jar.gradle"

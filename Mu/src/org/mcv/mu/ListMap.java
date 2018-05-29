@@ -12,33 +12,16 @@ import java.util.stream.Stream;
 public class ListMap<V> extends LinkedHashMap<String, V> {
 	
 	private static final long serialVersionUID = 1L;
-	private static class Gensym {
-		
-		private String prefix;
-		private long id;
-		private String fmt;
 
-		public Gensym() {
-			this("G_");
-		}
-		
-		public Gensym(String pref) {
-			prefix = pref;
-			id = (long) 0;
-			setDigits(9);
-		}
-
-		public void setDigits(int d) {
-			fmt = String.format("%%s%%0%dd", d);
-		}
-
-		public String nextSymbol() {
-			return String.format(fmt, prefix, id++);
-		}
-
+	static Gensym gensym = new Gensym();
+	
+	/* constructors */
+	public ListMap() {
+		super();
 	}
-
-	private static Gensym gensym = new Gensym();
+	public ListMap(ListMap<V> other) {
+		super(other);
+	}
 	
 	@Override
 	public V put(String key, V value) {

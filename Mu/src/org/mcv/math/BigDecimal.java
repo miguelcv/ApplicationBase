@@ -1698,12 +1698,12 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     	if(isNegInf) return NEGATIVE_INFFINITY;
 
         /*
-         * TODO => NaN/INF
          * Handle zero cases first.
          */
         if (divisor.signum() == 0) {   // x/0
-            if (this.signum() == 0)    // 0/0
+            if (this.signum() == 0) {   // 0/0
                 throw new ArithmeticException("Division undefined");  // NaN
+            }
             throw new ArithmeticException("Division by zero");
         }
 
@@ -3001,7 +3001,6 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
      *          less than, equal to, or greater than {@code val}.
      */
     public int compareTo(BigDecimal val) {
-    	// TODO
     	// NaN
     	if(isNan) return 0;
     	// INF
@@ -3012,8 +3011,9 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
         if (scale == val.scale) {
             long xs = intCompact;
             long ys = val.intCompact;
-            if (xs != INFLATED && ys != INFLATED)
+            if (xs != INFLATED && ys != INFLATED) {
                 return xs != ys ? ((xs > ys) ? 1 : -1) : 0;
+            }
         }
         int xsign = this.signum();
         int ysign = val.signum();
@@ -3095,7 +3095,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     public boolean equals(Object x) {
     	// NaN
     	if(isNan) return false;
-    	// INF TODO
+    	// INF
     	if(isPosInf) return false;
     	if(isNegInf) return false;
     	

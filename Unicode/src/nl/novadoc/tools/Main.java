@@ -157,6 +157,12 @@ public class Main {
 
 		System.out.println("Symbols");
 		System.out.printf("MATH:         %d\n", cat.get("Sm").get(0));
+		List<Integer> sm = cat.get("Sm");
+		for(int c : cat.get("Sm").subList(1, sm.size())) {			
+			String s = new String(Character.toChars(c));
+			System.out.print(s);
+		}
+		System.out.println();
 		System.out.printf("CURRENCY:     %d\n", cat.get("Sc").get(0));
 		System.out.printf("MODIFIER:     %d\n", cat.get("Sk").get(0));
 		System.out.printf("OTHER:        %d\n", cat.get("So").get(0));

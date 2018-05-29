@@ -1,5 +1,7 @@
 package org.mcv.mu.stdlib;
 
+import java.util.Arrays;
+
 public class IChar extends IType {
 	
 	public static Boolean gt(Integer a, Integer b) {
@@ -26,6 +28,14 @@ public class IChar extends IType {
 		return a != b;
 	}
 
+	public static Boolean eqeq(Integer a, Integer b) {
+		return a == b;
+	}
+	
+	public static Boolean neqeq(Integer a, Integer b) {
+		return a != b;
+	}
+
 	public static Class<?> javaType() {
 		return Integer.class;
 	}
@@ -46,8 +56,20 @@ public class IChar extends IType {
 		return --a;
 	}
 	
-	public static Boolean isTrue(Integer a) {
-		return a > 0;
+	public static Integer max(Integer a, Integer b) {
+		return a >= b ? a : b;
+	}
+
+	public static Integer min(Integer a, Integer b) {
+		return a < b ? a : b;		
+	}
+
+	public static String toString(Integer a) {
+		return new String(Character.toChars(a));
+	}
+	
+	public static void doesNotUnderstand(String op, Object o, Object...args) {
+		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
 	}
 
 }

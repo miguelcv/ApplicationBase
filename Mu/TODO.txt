@@ -1,0 +1,19 @@
+* doc comments
+* own variables
+* exceptions, AOP ...
+* include inheritance
+* union/intersection types
+* nullables / elvis operator
+* typeof / casting
+* operator definition
+* destructuring assignment
+* spread operator
+* threads, await, async
+* modules, imports, ...
+* ? automated tests
+* ref type operators
+* units of measurement
+* date/time, regex
+* macros
+* queues, stacks, trees, bags, bitstrings
+* complex, rational, bcd

@@ -1,15 +1,25 @@
 package org.mcv.mu.stdlib;
 
+import java.util.Arrays;
+
 public class IBool extends IType {
 
 	public static Boolean eq(Boolean a, Boolean b) {
 		return a == b;	
 	}
-	
+
+	public static Boolean eqeq(Boolean a, Boolean b) {
+		return a == b;	
+	}
+
 	public static Boolean neq(Boolean a, Boolean b) {
 		return !a.equals(b);	
 	}
-	
+
+	public static Boolean neqeq(Boolean a, Boolean b) {
+		return !a.equals(b);	
+	}
+
 	public static Class<?> javaType() {
 		return Boolean.class;
 	}
@@ -54,7 +64,20 @@ public class IBool extends IType {
 		return a ? b : true;
 	}
 
-	public static Boolean isTrue(Boolean a) {
-		return a;
+	public static Boolean max(Boolean a, Boolean b) {
+		return a ? a : b;
 	}
+
+	public static Boolean min(Boolean a, Boolean b) {
+		return a ? b : a;
+	}
+
+	public static String toString(Object a) {
+		return String.valueOf(a);
+	}
+	
+	public static void doesNotUnderstand(String op, Object o, Object...args) {
+		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
+	}
+
 }

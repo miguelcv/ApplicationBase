@@ -1,5 +1,7 @@
 package org.mcv.mu.stdlib;
 
+import java.util.Arrays;
+
 import org.mcv.math.BigInteger;
 
 public class IInt extends IType {
@@ -39,6 +41,14 @@ public class IInt extends IType {
 	}
 	
 	public static Boolean neq(BigInteger a, BigInteger b) {
+		return !eq(a, b);
+	}
+
+	public static Boolean eqeq(BigInteger a, BigInteger b) {
+		return a.equals(b);
+	}
+	
+	public static Boolean neqeq(BigInteger a, BigInteger b) {
 		return !eq(a, b);
 	}
 
@@ -168,9 +178,17 @@ public class IInt extends IType {
 	public static BigInteger min(BigInteger a, BigInteger b) {
 		return a.min(b);
 	}
-		
-	public static Boolean isTrue(Boolean a) {
-		return true;
+
+	public static String toString(BigInteger a) {
+		return String.valueOf(a);
+	}
+	
+	public static Double toReal(BigInteger a) {
+		return a.doubleValue();
+	}
+	
+	public static void doesNotUnderstand(String op, Object o, Object...args) {
+		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
 	}
 
 }

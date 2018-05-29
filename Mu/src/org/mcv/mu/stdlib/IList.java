@@ -1,8 +1,10 @@
 package org.mcv.mu.stdlib;
 
+import java.util.List;
+
 public class IList {
 	
-	public static Boolean isTrue(Boolean a) {
-		return true;
+	public static String toString(List<?> a) {
+		return a.toString();
 	}
 }

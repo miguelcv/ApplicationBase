@@ -4,13 +4,12 @@ import java.io.File;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.github.tomtung.latex2unicode.LaTeX2Unicode;
-
 import nl.novadoc.utils.FileUtils;
 
 public class Encoding {
 
 	static Map<String, Integer> unicodeNames = new LinkedHashMap<>();
+	static Map<String, Integer> latexEscapes = new LinkedHashMap<>();
 
 	static {
 		File f = new File("UniData.txt");
@@ -21,6 +20,14 @@ public class Encoding {
 			for(String key : keys) {
 				unicodeNames.put(key, fromHex(vk[0]));
 			}
+		}
+		f = new File("LaTeX.txt");
+		lines = FileUtils.readLines(f);
+		for (String line : lines) {
+			String[] vk = line.split(": ");
+			String key = vk[0];
+			String val = vk[1];
+			latexEscapes.put(key, val.codePointAt(0));
 		}
 	}
 
@@ -46,7 +53,7 @@ public class Encoding {
 
 	public static int fromLaTeX(String escape) {
 		try {
-			return LaTeX2Unicode.convert(escape).codePointAt(0);
+			return latexEscapes.get(escape);
 		} catch (Exception e) {
 			return -1;
 		}

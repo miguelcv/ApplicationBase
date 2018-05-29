@@ -1,5 +1,7 @@
 package org.mcv.mu.stdlib;
 
+import java.util.Arrays;
+
 public class IReal extends IType {
 
 	public static Boolean gt(double a, double b) {
@@ -26,6 +28,14 @@ public class IReal extends IType {
 		return a != b;
 	}
 
+	public static Boolean eqeq(double a, double b) {
+		return a == b;
+	}
+	
+	public static Boolean neqeq(double a, double b) {
+		return a != b;
+	}
+
 	public static Class<?> javaType() {
 		return Double.class;
 	}
@@ -43,11 +53,11 @@ public class IReal extends IType {
 	}
 
 	public static double inc(double a) {
-		return ++a;
+		return a + 1;
 	}
 	
 	public static double dec(double a) {
-		return --a;
+		return a - 1;
 	}
 
 	public static double div(double a, double b) {
@@ -82,8 +92,12 @@ public class IReal extends IType {
 		return Math.sqrt(a);
 	}
 	
-	public static Boolean isTrue(double a) {
-		return true;
+	public static String toString(Object a) {
+		return String.valueOf(a);
+	}
+	
+	public static void doesNotUnderstand(String op, Object o, Object...args) {
+		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
 	}
 
 }

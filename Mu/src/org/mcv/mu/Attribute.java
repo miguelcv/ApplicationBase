@@ -2,7 +2,15 @@ package org.mcv.mu;
 
 public enum Attribute implements TokenType {
 	NONE,
-	SHARED, OWN, EXTERN, ABSTRACT,
-	VOLATILE, ASYNC, TRANSIENT,
-	OVERRIDE
+	/* funcdefs */
+	LOCAL, 	OVERRIDE,
+	/* var/valdefs */
+	/* create [overridable] getter [var: setter] */
+	PROP,
+	/* class/own variable */
+	OWN,
+	/* doc comment */
+	DOC
+	/* perhaps later... */
+	//EXTERN func, ABSTRACT func ,VOLATILE var, ASYNC func, TRANSIENT var,
 }

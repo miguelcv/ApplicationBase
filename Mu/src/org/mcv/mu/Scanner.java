@@ -2,9 +2,11 @@ package org.mcv.mu;
 
 import static org.mcv.mu.Keyword.*;
 import static org.mcv.mu.Soperator.*;
-import java.math.BigInteger;
+import org.mcv.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Stack;
 
 class Scanner {
 	private final String source;
@@ -12,20 +14,167 @@ class Scanner {
 	private int start = 0;
 	private int current = 0;
 	private int line = 1;
-	private static final int MAX_TERMINATOR = 8;
 	private static final int BOM = 0xFEFF;
+	private ListMap<Object> system;
+	private int maxTerminator;
+	
+	static class ScannerError extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+		protected int cp;
+		protected int line;
 
-	Scanner(String source) {
+		public ScannerError(String msg) {
+			super(msg);
+		}
+		
+		public ScannerError(Exception e) {
+			super(e);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	Scanner(String source, Environment main) {
 		this.source = source;
+		this.system = (ListMap<Object>)main.get("System").value;
+		maxTerminator = (int)system.getOrDefault("maxRawStringTerminator", 8);
 	}
 
 	List<Token> scanTokens() {
-		while (!isAtEnd()) {
-			// We are at the beginning of the next lexeme.
-			start = current;
-			scanToken();
+		try {
+			while (!isAtEnd()) {
+				start = current;
+				try {
+					scanToken();
+				} catch(Exception e) {
+					ScannerError se = new ScannerError(e);
+					se.cp = isAtEnd() ? 0 : source.codePointAt(current);
+					se.line = line;
+					Mu.error(se);
+				}
+			}
+			tokens.add(new Token(EOF, "", null, line));
+			python();
+			return postprocess(tokens);
+		} catch (ScannerError e) {
+			e.cp = source.codePointAt(current);
+			e.line = line;
+			Mu.error(e);
+			return List.of();
 		}
-		tokens.add(new Token(EOF, "", null, line));
+	}
+
+	private List<Token> postprocess(List<Token> tokens) {
+		List<Token> sub = new ArrayList<>();
+		int ix;
+		
+		/* simplify redundant combinations:
+		 * ( NL IND		(;
+		 * NL DED )		;)
+		*/
+		sub.clear();
+		sub.add(new Token(LEFT_PAREN));
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(INDENT));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 2);
+		}
+		
+		sub.clear();
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(DEDENT));
+		sub.add(new Token(RIGHT_PAREN));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 1);
+		}
+
+		/* 
+		 * [ NL IND		[;
+		 * NL DED ]		;]
+		 */
+		sub.clear();
+		sub.add(new Token(LEFT_BRK));
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(INDENT));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 2);
+		}
+		
+		sub.clear();
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(DEDENT));
+		sub.add(new Token(RIGHT_BRK));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 1);
+		}
+
+		/*
+		 * { NL IND		{;
+		 * NL DED }		;}
+		 */
+		sub.clear();
+		sub.add(new Token(LEFT_BRACE));
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(INDENT));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 2);
+		}
+		
+		sub.clear();
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(DEDENT));
+		sub.add(new Token(RIGHT_BRACE));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 1);
+		}
+
+		/* replace all NL INDENT with (; */	
+		sub.clear();
+		sub.add(new Token(NEWLINE));
+		sub.add(new Token(INDENT));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.get(ix).type = LEFT_PAREN;
+			tokens.get(ix+1).type = SEMICOLON;
+		}
+		
+		/*
+		 * ; NL			;
+		 */
+		sub.clear();
+		sub.add(new Token(SEMICOLON));
+		sub.add(new Token(NEWLINE));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix + 1);
+		}
+		
+		/* replace all NEWLINE with SEMICOLON */
+		sub.clear();
+		sub.add(new Token(NEWLINE));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.get(ix).type = SEMICOLON;
+		}
+		
+		/* replace multiple semicolons */
+		sub.clear();
+		sub.add(new Token(SEMICOLON));
+		sub.add(new Token(SEMICOLON));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.remove(ix);
+		}
+
+		/* replace all INDENT with ( */
+		sub.clear();
+		sub.add(new Token(INDENT));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.get(ix).type = LEFT_PAREN;
+		}
+
+		/* replace all DEDENT with ) */
+		sub.clear();
+		sub.add(new Token(DEDENT));
+		while((ix = Collections.indexOfSubList(tokens, sub)) >= 0) {
+			tokens.get(ix).type = RIGHT_PAREN;
+		}
+		
 		return tokens;
 	}
 
@@ -42,17 +191,27 @@ class Scanner {
 		case ' ':
 		case '\r':
 		case '\t':
-			// Ignore whitespace.
+			if (match('('))
+				addToken(LEFT_PAREN);
+			/* else ignore */
 			break;
 		case '\n':
-			addToken(SEMICOLON);
+			addToken(NEWLINE);
+			if (match('('))
+				addToken(LEFT_PAREN);
 			line++;
+			python();
 			break;
 		case ';':
 			addToken(SEMICOLON);
 			break;
 		case '(':
-			addToken(LEFT_PAREN);
+			if (current == 1) {
+				/* at beginning of file */
+				addToken(LEFT_PAREN);
+			} else {
+				addToken(LPAREN_CALL);
+			}
 			break;
 		case ')':
 			addToken(RIGHT_PAREN);
@@ -70,7 +229,8 @@ class Scanner {
 			addToken(RIGHT_BRK);
 			break;
 		case '`':
-			addToken(BACKTICK);
+			++start;
+			identifier(true);
 			break;
 		case '\'':
 			charlit();
@@ -121,7 +281,7 @@ class Scanner {
 		case '∞':
 			addToken(INF);
 			break;
-			
+
 		/* OPERATORS */
 		case '÷':
 			addToken(match('=') ? SLASHIS : SLASH);
@@ -142,11 +302,9 @@ class Scanner {
 			addToken(match('=') ? PERCENTIS : PERCENT);
 			break;
 		case '^':
+		case '⊕':
 			addToken(match('=') ? POWIS : POW);
 			break;
-		case '⊕':
-			addToken(match('=') ? XORIS : XOR);
-			break;		
 		case '!':
 			addToken(BANG);
 			break;
@@ -160,7 +318,7 @@ class Scanner {
 			addToken(match('=') ? ANDIS : AND);
 			break;
 		case '|':
-			addToken(match('=') ? ORIS: OR);
+			addToken(match('=') ? ORIS : OR);
 			break;
 		case '*':
 		case '×':
@@ -168,46 +326,87 @@ class Scanner {
 			break;
 		case '~':
 		case '¬':
-			addToken(match('=') ? NOT_EQUAL : NOT);
+			addToken(match('=') ? (match('=') ? NEQEQ : NOT_EQUAL) : NOT);
 			break;
 		case '√':
 			addToken(SQRT);
 			break;
-			
+
 		/* RELOPS */
 		case '=':
-			addToken(match('>') ? ARROW : match('=')? EQEQ : EQUAL);
+			addToken(match('>') ? ARROW : match('=') ? EQEQ : EQUAL);
 			break;
 		case '<':
-			addToken(match('=') ? LESS_EQUAL :
-			match('-') ? ASSIGN : 
-			match('<') ? 
-				(match('=') ? LSHIFTIS : LEFTSHIFT) 
-				: LESS);
+			addToken(match('=') ? LESS_EQUAL
+					: match('-') ? ASSIGN : match('<') ? (match('=') ? LSHIFTIS : LEFTSHIFT) : LESS);
 			break;
 		case '≤':
 			addToken(LESS_EQUAL);
 			break;
 		case '>':
-			addToken(match('=') ? GREATER_EQUAL :
-				match('>') ?
-						( match('=') ? RSHIFTIS : RIGHTSHIFT)
-				: GREATER);
+			addToken(match('=') ? GREATER_EQUAL : match('>') ? (match('=') ? RSHIFTIS : RIGHTSHIFT) : GREATER);
 			break;
 		case '≥':
 			addToken(GREATER_EQUAL);
 			break;
-			
+
 		default:
 			if (isDigit(c)) {
 				number();
 			} else if (isAlpha(c)) {
 				identifier();
+			} else if (isOperator(c)) {
+				addToken(OPERATOR);
 			} else {
-				Mu.error(line, "Unexpected character " + (char)c);
+				throw new ScannerError("Unexpected character " + new String(Character.toChars(c)));
 			}
 			break;
 		}
+	}
+
+	Stack<Integer> pystk;
+
+	private void python() {
+		if (pystk == null) {
+			pystk = new Stack<>();
+			pystk.push(0);
+		}
+		int indent = calcIndent();
+		if (indent > pystk.peek()) {
+			pystk.push(indent);
+			addToken(INDENT);
+		} else if (indent < pystk.peek()) {
+			while (pystk.peek() > indent) {
+				pystk.pop();
+				addToken(DEDENT);
+			}
+			if (pystk.peek() != indent) {
+				throw new ScannerError("Incorrect indentation");
+			}
+		}
+	}
+
+	private int calcIndent() {
+		if (isAtEnd())
+			return 0;
+		int ret = 0;
+		int spacesToATab = (int) system.getOrDefault("spacesToATab", 4);
+		for (int i = current; i < source.length(); i++) {
+			int c = source.codePointAt(i);
+			if (c == '\t') {
+				ret = (((ret + spacesToATab) / spacesToATab) * spacesToATab);
+			} else if (c == ' ') {
+				++ret;
+			} else {
+				break;
+			}
+		}
+		return ret;
+	}
+
+	private boolean isOperator(int c) {
+		int type = Character.getType(c);
+		return type == Character.MATH_SYMBOL;
 	}
 
 	private void ccomment() {
@@ -235,14 +434,15 @@ class Scanner {
 			case '\n':
 				++line;
 				break;
-				
+
 			default:
-				if(isAtEnd()) break loop;
+				if (isAtEnd())
+					break loop;
 			}
 			advance();
-		}		
+		}
 	}
-	
+
 	private int advance() {
 		current++;
 		return source.codePointAt(current - 1);
@@ -274,34 +474,46 @@ class Scanner {
 
 	private void charlit() {
 		StringBuilder sb = new StringBuilder();
-		if(peekNext() == '\'') {
+		if (peekNext() == '\'') {
 			sb.appendCodePoint(peek());
 			advance();
 		}
-		while(peek() != '\'') {
-			if(isAtEnd()) break;
+		while (peek() != '\'') {
+			if (isAtEnd())
+				break;
 			sb.appendCodePoint(peek());
 			advance();
 		}
-		if(!isAtEnd()) advance();
-		
+		if (!isAtEnd())
+			advance();
+
 		String decoded = substCodes(sb.toString());
-		if(decoded.length() == 1) {
+		if (decoded.codePoints().count() == 1) {
 			addToken(CHAR, decoded.codePointAt(0));
 			return;
 		}
-		Mu.error(line, "Bad character literal.");
+		throw new ScannerError("Bad character literal.");
 	}
 
 	private void string() {
 		String terminator = "";
 		String terminatorQ;
+		boolean raw = false;
+		StringBuilder sb = new StringBuilder();
 
-		if (peek() == '(') {
-			terminator = collect(MAX_TERMINATOR, ')');
+		if (peek() == '<' && peekNext() == '{') {
+			terminator = collect(maxTerminator, '}');
+			if(terminator.length() > 1) {
+				/* skip { */
+				terminator = terminator.substring(1);
+				++current;
+			}
+			raw = terminator.length() > 0;
+			if(!raw) {
+				System.err.println("Warning: bad raw string literal");
+			}
 		}
 		terminatorQ = terminator + "\"";
-		start += terminator.length() + 1;
 		current += terminator.length();
 
 		while (!isAtEnd()) {
@@ -310,36 +522,49 @@ class Scanner {
 			}
 			if (peek() == '\n') {
 				line++;
+				sb.append('\n');
+				advance();
+				if (!raw) {
+					while (Character.isWhitespace(peek())) {
+						advance();
+					}
+				}
+			} else {
+				sb.appendCodePoint(peek());
+				advance();
 			}
-			advance();
 		}
 
 		// Unterminated string.
 		if (isAtEnd()) {
-			Mu.error(line, "Unterminated string.");
-			return;
+			throw new ScannerError("Unterminated string.");
 		}
 
-		// Unicode, HTML and LaTeX Escapes
-		String value = substCodes(source.substring(start, current));
-		addToken(STRING, value);
+		if (!raw) {
+			// Unicode, HTML and LaTeX Escapes
+			String value = substCodes(sb.toString());
+			addToken(STRING, value);
+		} else {
+			addToken(RSTRING, sb.toString());
+		}
 
 		for (int i = 0; i < terminatorQ.length(); i++) {
 			advance();
 		}
+
 	}
 
 	private static String substCodes(String string) {
 		StringBuilder sb = new StringBuilder();
 		int ix1 = string.indexOf("@{");
-		int ix2 = string.indexOf('}');
-		if(ix1 >= 0 && ix2 > ix1) {
-			String name = string.substring(ix1+2, ix2);
+		int ix2 = string.indexOf('}', ix1);
+		if (ix1 >= 0 && ix2 > ix1) {
+			String name = string.substring(ix1 + 2, ix2);
 			String pre = string.substring(0, ix1);
-			String post = string.substring(ix2+1);
+			String post = string.substring(ix2 + 1);
 			int cp = Encoding.decode(name);
-			if(cp == -1) {
-				return sb.append(string.substring(0, ix2+1)).append(substCodes(post)).toString();
+			if (cp == -1) {
+				return sb.append(string.substring(0, ix2 + 1)).append(substCodes(post)).toString();
 			} else {
 				sb.append(pre).appendCodePoint(cp);
 				return sb.append(substCodes(post)).toString();
@@ -348,7 +573,7 @@ class Scanner {
 			return string;
 		}
 	}
-	
+
 	private String collect(int max, int end) {
 		StringBuilder sb = new StringBuilder();
 		for (int i = current; i < current + max; i++) {
@@ -366,36 +591,34 @@ class Scanner {
 	}
 
 	private boolean isDigit(int c) {
-		if(isAtEnd()) return false;
 		return c >= '0' && c <= '9' || c == '_';
 	}
 
 	private boolean isDigit(int c, int radix) {
-		if(isAtEnd()) return false;
-		if(radix <= 10) {
-			return c >= '0' && c <= '0' + radix-1 || c == '_';
+		if (radix <= 10) {
+			return c >= '0' && c <= '0' + radix - 1 || c == '_';
 		} else {
 			c = Character.toUpperCase(c);
-			return c >= '0' && c <= '9' || c >= 'A' && c <= 'A' + radix-10 || c == '_';
+			return c >= '0' && c <= '9' || c >= 'A' && c <= 'A' + radix - 10 || c == '_';
 		}
 	}
 
 	private void number() {
-		
+
 		while (isDigit(peek()))
 			advance();
 
 		// radix
-		if(peek() == 'r') {
+		if (peek() == 'r') {
 			int radix = Integer.parseInt(source.substring(start, current));
-			if(radix < 2 || radix > 36) {
-				Mu.runtimeError("Radix %d is not valid: must be 2 ≤ r ≤ 36", radix);
+			if (radix < 2 || radix > 36) {
+				throw new ScannerError(String.format("Radix %d is not valid: must be 2 ≤ r ≤ 36", radix));
 			}
-			start = current+1;
+			start = current + 1;
 			advance();
 			while (isDigit(peek(), radix))
 				advance();
-			addToken(INT, new BigInteger(strip_(source.substring(start, current)), radix));
+			addToken(INT, new BigInteger(strip(source.substring(start, current)), radix));
 		}
 		// Look for a fractional/exponent part.
 		else if (peek() == '.' && isDigit(peekNext())) {
@@ -403,29 +626,29 @@ class Scanner {
 			advance();
 			while (isDigit(peek()))
 				advance();
-			if(peek() == 'e' || peek() == 'E') {
-				if(peekNext() == '+' || peekNext() == '-') {
+			if (peek() == 'e' || peek() == 'E') {
+				if (peekNext() == '+' || peekNext() == '-') {
 					advance();
 				}
 				advance();
 				while (isDigit(peek()))
 					advance();
 			}
-			addToken(REAL, Double.valueOf(strip_(source.substring(start, current))));
-		} else if(peek() == 'e' || peek() == 'E') {
-			if(peekNext() == '+' || peekNext() == '-') {
+			addToken(REAL, Double.valueOf(strip(source.substring(start, current))));
+		} else if (peek() == 'e' || peek() == 'E') {
+			if (peekNext() == '+' || peekNext() == '-') {
 				advance();
 			}
 			advance();
 			while (isDigit(peek()))
 				advance();
-			addToken(REAL, Double.valueOf(strip_(source.substring(start, current))));
+			addToken(REAL, Double.valueOf(strip(source.substring(start, current))));
 		} else {
-			addToken(INT, new BigInteger(strip_(source.substring(start, current))));
+			addToken(INT, new BigInteger(strip(source.substring(start, current))));
 		}
 	}
-	
-	private String strip_(String s) {
+
+	private String strip(String s) {
 		return s.replace("_", "");
 	}
 
@@ -436,52 +659,53 @@ class Scanner {
 	}
 
 	private boolean isAlpha(int c) {
-		if(isAtEnd()) 
-			return false;
 		return Character.isJavaIdentifierStart(c);
 	}
 
 	private boolean isAlphaNumeric(int c) {
-		if(isAtEnd()) return false;
-		return Character.isJavaIdentifierPart(c);
+		return Character.isAlphabetic(c) || isDigit(c);
 	}
 
 	private void identifier() {
+		identifier(false);
+	}
+	
+	private void identifier(boolean escaped) {
 		while (isAlphaNumeric(peek()))
 			advance();
 		// See if the identifier is a reserved word.
 		String text = source.substring(start, current);
-		
+
 		TokenType type;
-		
-		if(isKeyword(text)) {
+
+		if (!escaped && isKeyword(text)) {
 			addToken(Keyword.valueOf(text.toUpperCase()));
-		} else if(isAttribute(text)) {
+		} else if (!escaped && isAttribute(text)) {
 			addToken(Attribute.valueOf(text.toUpperCase()));
 		} else {
-			if(Character.isUpperCase(text.codePointAt(0))) {
+			if (Character.isUpperCase(text.codePointAt(0))) {
 				type = TID;
 			} else {
 				type = ID;
 			}
 			addToken(type);
-		}	
+		}
 	}
-	
+
 	private boolean isKeyword(String id) {
 		try {
 			Keyword.valueOf(id.toUpperCase());
 			return true;
-		} catch(IllegalArgumentException e) {
+		} catch (IllegalArgumentException e) {
 			return false;
 		}
 	}
-	
+
 	private boolean isAttribute(String id) {
 		try {
 			Attribute.valueOf(id.toUpperCase());
 			return true;
-		} catch(IllegalArgumentException e) {
+		} catch (IllegalArgumentException e) {
 			return false;
 		}
 	}
