@@ -1,0 +1,26 @@
+/**
+ *  Library JAR 
+ */
+
+group = "nl.novadoc.utils"
+
+project.ext {
+    layout="eclipse"
+    javaVersion="1.8"
+    useUtils=true
+    useLogging=true
+    useLog4j=false
+    executable=false
+    fatJar=false
+    srcJar=false
+    encryptConf=false
+    windowsExe=false
+    fnVersion='5.2'
+}
+
+apply from: "${project.localPluginsUrl}/default.gradle"
+
+dependencies {
+}
+
+apply from: "${project.localPluginsUrl}/jar.gradle"

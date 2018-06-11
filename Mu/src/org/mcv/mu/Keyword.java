@@ -2,12 +2,14 @@ package org.mcv.mu;
 
 public enum Keyword implements TokenType {
 	NONE,
-	MODULE, IMPORT,
-	TYPE, TYPEOF, CLASS, INTERFACE,
+	IMPORT, FROM, AS, WHERE,
+	TYPE, CLASS, OPERATOR,
+	UNIT, SIUNIT,
 	FUN,
 	RETURN,
-	PRINT,
-	VAR, VAL, 
+	THROW,
+	PRINT, ASSERT,
+	VAR, VAL, GET, // SET,
 	IF, UNLESS, ELSE,
 	SELECT, WHEN,
 	DO, WHILE, UNTIL,
@@ -15,7 +17,7 @@ public enum Keyword implements TokenType {
 	FOR, IN,
 	BREAK, CONTINUE,
 	FALSE, TRUE, NIL,
-	SQRT, GCD, ABS, MAX, MIN, XOR,
+	SQRT, ABS, XOR,
 	MOD, REM, INF, NAN,
 	// type operators
 	REF, LIST, SET, MAP, ENUM

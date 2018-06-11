@@ -581,7 +581,7 @@ public class BigInteger extends Number implements Comparable<BigInteger> {
         this(val, 10);
     }
 
-    private BigInteger(double val) {
+    public BigInteger(double val) {
     	mag = new int[0];
         if(Double.isNaN(val)) {
         	isNaN = true;

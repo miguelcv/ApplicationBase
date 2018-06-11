@@ -1,19 +1,19 @@
-* doc comments
-* own variables
-* exceptions, AOP ...
-* include inheritance
-* union/intersection types
-* nullables / elvis operator
-* typeof / casting
-* operator definition
-* destructuring assignment
-* spread operator
-* threads, await, async
-* modules, imports, ...
-* ? automated tests
-* ref type operators
 * units of measurement
+* spread operator
+* imports, using Git!!
+	import "path/to/file[.mu]" from "git-repo[:commit]" [where (map)]
+	config: git-repo-roots
+	thisname.mu.deps => dep name hash
+* typeof / casting-promotion
+* native operator definition, non ad-hoc operator mapping
+
+* BUG: line off-by-one
+* BUG: comments and indentation
+
+* threads, await, async (Actors?)
 * date/time, regex
-* macros
 * queues, stacks, trees, bags, bitstrings
 * complex, rational, bcd
+
+* ? automated tests
+* ? macros

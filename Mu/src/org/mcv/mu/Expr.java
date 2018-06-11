@@ -11,17 +11,17 @@ public abstract class Expr {
 	Type type = Type.None;
 	int line;
 	
-	interface Visitor<R> {
+	interface Visitor {
 		/* decl */
-		Result visitModuleDef(Module expr);
 		Result visitTemplateDef(TemplateDef expr);
 		Result visitVarDef(Var expr);
 		Result visitValDef(Val expr);
 		Result visitTypeDefExpr(TypeDef expr);
+		Result visitImportExpr(Import expr);
 		
 		/* print */
 		Result visitPrintExpr(Print expr);
-		Result visitPrintTypeExpr(PrintType expr);
+		Result visitAssertExpr(Assert expr);
 		
 		/* ctrl */
 		Result visitIfExpr(If expr);
@@ -32,6 +32,8 @@ public abstract class Expr {
 		Result visitContinueExpr(Continue expr);
 		Result visitReturnExpr(Return expr);
 		Result visitAopExpr(Aop expr);
+		Result visitGetterExpr(Getter expr);
+		Result visitSetterExpr(Setter expr);
 		Result visitThrowExpr(Throw expr);
 		
 		/* expr */
@@ -53,37 +55,11 @@ public abstract class Expr {
 		Result visitCallExpr(Call expr);
 		Result visitDotExpr(Dot expr);
 		Result visitSubscriptExpr(Subscript expr);
-		
 	}
 	
 	// Nested Expr classes here...
 
 	/* DECLARATIONS */
-	static class Module extends Expr {
-		Module(Token name, Attributes attributes) {
-			this.type = Type.Any;
-			this.name = name;
-			this.line = name.line;
-			this.attributes = attributes;
-			if(attributes.isLocal(false)) {
-				attributes.put(PUBLIC, false);
-			} else {
-				attributes.put(PUBLIC, true);
-			}
-		}
-
-		<R> Result accept(Visitor<R> visitor) {
-			return visitor.visitModuleDef(this);
-		}
-
-		final Token name;
-		Attributes attributes;
-		// public environment??
-		@Override
-		public String toString() {
-			return "module " + name.lexeme;
-		}
-	}
 
 	public static class TemplateDef extends Expr {
 		TemplateDef(Token name, String kind, Params params, Type returnType, Block body, Attributes attributes) {
@@ -102,7 +78,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitTemplateDef(this);
 		}
 
@@ -119,55 +95,77 @@ public abstract class Expr {
 	}
 	
 	static class Var extends Expr {
-		Var(Token name, Expr initializer, Attributes attributes) {
-			this.name = name;
-			if(initializer == null) {
-				// for statement for var i in ...
-				this.initializer = new Expr.Literal(name, 0);
-				type = Type.Int;
-			} else if(initializer instanceof TypeLiteral) {
-				this.initializer = initializer;
-				type = ((TypeLiteral)initializer).literal;
-			} else {
-				this.initializer = initializer;
-				type = initializer.type;
-			}
+
+		Var(List<Token> names, Expr initializer, Expr.Map where, Attributes attributes) {
+			this.names.addAll(names);
+			this.initializer = initializer;
 			this.attributes = attributes;
+			this.where = where;
+			this.line = names.get(0).line;
+		}
+		
+		Var(Token name, Expr.Map where, Attributes attributes) {
+			// for statement for var i in ...
+			this.initializer = new Expr.Literal(name, 0);
+			type = Type.Int;
+			this.names.add(name);
+			this.attributes = attributes;
+			this.where = where;
+			this.line = name.line;			
+		}
+		
+		Var(Token name, Expr initializer, Expr.Map where, Attributes attributes) {
+			this.names.add(name);
+			this.initializer = initializer;
+			this.attributes = attributes;
+			this.where = where;
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitVarDef(this);
 		}
 
-		final Token name;
+		final List<Token> names = new ArrayList<>();
 		final Expr initializer;
 		final Attributes attributes;
+		Expr.Map where;
 		@Override
 		public String toString() {
-			return "var " + name.lexeme + ":" + initializer;
+			return "var " + names + ":" + initializer;
 		}
 	}
 
 	static class Val extends Expr {
-		Val(Token name, Expr initializer, Attributes attributes) {
-			this.name = name;
+		
+		Val(List<Token> names, Expr initializer, Expr.Map where, Attributes attributes) {
+			this.names.addAll(names);
 			this.initializer = initializer;
 			this.attributes = attributes;
-			type = initializer.type;
+			this.where = where;
+			this.line = names.get(0).line;
+		}
+		
+		Val(Token name, Expr initializer, Map where, Attributes attributes) {
+			this.names.add(name);
+			this.initializer = initializer;
+			this.attributes = attributes;
+			this.where = where;
+			this.type = initializer.type;
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitValDef(this);
 		}
 
-		final Token name;
+		final List<Token> names = new ArrayList<>();
 		final Expr initializer;
+		Expr.Map where;
 		final Attributes attributes;
 		@Override
 		public String toString() {
-			return "val " + name.lexeme + ":" + initializer;
+			return "val " + names + ":" + initializer;
 		}
 	}
 	
@@ -179,7 +177,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitAopExpr(this);
 		}
 
@@ -191,7 +189,49 @@ public abstract class Expr {
 			return "AOP " + name.lexeme + " " + callable + ":" + block;
 		}
 	}
-	
+
+	static class Getter extends Expr {
+		Getter(Token name, List<Token> ids, Block block) {
+			this.name = name;
+			this.variables = ids;
+			this.block = block;
+			this.line = name.line;
+		}
+
+		Result accept(Visitor visitor) {
+			return visitor.visitGetterExpr(this);
+		}
+
+		final Token name;
+		final List<Token> variables;
+		final Block block;
+		@Override
+		public String toString() {
+			return name.lexeme + " " + variables + ":" + block;
+		}
+	}
+
+	static class Setter extends Expr {
+		Setter(Token name, List<Token> variables, Block block) {
+			this.name = name;
+			this.variables = variables;
+			this.block = block;
+			this.line = name.line;
+		}
+
+		Result accept(Visitor visitor) {
+			return visitor.visitSetterExpr(this);
+		}
+
+		final Token name;
+		final List<Token> variables;
+		final Block block;
+		@Override
+		public String toString() {
+			return name.lexeme + " " + variables + ":" + block;
+		}
+	}
+
 	static class Print extends Expr {
 		Print(Token name, Expr expression) {
 			this.expression = expression;
@@ -199,7 +239,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitPrintExpr(this);
 		}
 
@@ -210,21 +250,25 @@ public abstract class Expr {
 		}
 	}
 
-	static class PrintType extends Expr {
-		PrintType(Token name, Expr expression) {
+	static class Assert extends Expr {
+		Assert(Token name, Expr expression, String msg, Set criteria) {
 			this.expression = expression;
+			this.msg = msg;
 			type = Type.Void;
+			this.criteria = criteria;
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
-			return visitor.visitPrintTypeExpr(this);
+		Result accept(Visitor visitor) {
+			return visitor.visitAssertExpr(this);
 		}
 
 		final Expr expression;
+		final String msg;
+		Set criteria;
 		@Override
 		public String toString() {
-			return "typeof " + expression;
+			return "assert " + expression + " " + msg;
 		}
 	}
 
@@ -236,7 +280,7 @@ public abstract class Expr {
 			this.line = keyword.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitReturnExpr(this);
 		}
 
@@ -256,7 +300,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitThrowExpr(this);
 		}
 
@@ -269,9 +313,10 @@ public abstract class Expr {
 	}
 
 	static class While extends Expr {
-		While(Token name, Expr condition, Expr body, Expr atEnd) {
+		While(Token name, Expr condition, Expr body, Expr atEnd, Set criteria) {
 			this.condition = condition;
 			this.body = body;
+			this.criteria = criteria;
 			this.atEnd = atEnd;
 			type = Type.Void;
 			this.line = name.line;
@@ -282,13 +327,14 @@ public abstract class Expr {
 			}
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitWhileExpr(this);
 		}
 
 		final Expr condition;
 		final boolean invert;
 		final Expr body;
+		Set criteria;
 		final Expr atEnd;
 		@Override
 		public String toString() {
@@ -306,7 +352,7 @@ public abstract class Expr {
 			this.atEnd = atEnd;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitForExpr(this);
 		}
 
@@ -326,7 +372,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitBreakExpr(this);
 		}
 		@Override
@@ -341,7 +387,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitContinueExpr(this);
 		}
 		@Override
@@ -361,8 +407,7 @@ public abstract class Expr {
 		List<Expr> exprs;
 		final Type eltType;
 		
-		@Override
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitSeqExpr(this);
 		}
 		@Override
@@ -374,14 +419,13 @@ public abstract class Expr {
 	static class Map extends Expr {
 		Map(Token name, List<Expr> exprs) {
 			this.mappings = exprs;
-			type = new Type.MapType(Type.String, Type.Any);
+			type = new Type.MapType(Type.Any);
 			this.line = name.line;
 		}
 		
 		List<Expr> mappings;
 		
-		@Override
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitMapExpr(this);
 		}
 		@Override
@@ -401,10 +445,10 @@ public abstract class Expr {
 		java.util.Set<Expr> exprs;
 		final Type eltType;
 		
-		@Override
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitSetExpr(this);
 		}
+		
 		@Override
 		public String toString() {
 			return "set {}";
@@ -426,8 +470,7 @@ public abstract class Expr {
 		boolean startIncl;
 		boolean endIncl;
 		
-		@Override
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitRangeExpr(this);
 		}
 		@Override
@@ -449,35 +492,43 @@ public abstract class Expr {
 		Expr value;
 		boolean arrow;
 		
-		@Override
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitMappingExpr(this);
 		}
 		@Override
 		public String toString() {
-			return key + "=>" + value;
+			return key + " → " + value;
 		}
 	}
 
 	static class Assign extends Expr {
-		Assign(Token name, Expr value, Token op) {
-			this.name = name;
+		
+		Assign(Token var, Expr value, Token op) {
+			this.var = List.of(var);
 			this.value = value;
 			this.op = op;
 			type = value.type;
-			this.line = name.line;
+			this.line = var.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Assign(List<Token> var, Expr value, Token op) {
+			this.var = var;
+			this.value = value;
+			this.op = op;
+			type = value.type;
+			this.line = var.get(0).line;
+		}
+
+		Result accept(Visitor visitor) {
 			return visitor.visitAssignExpr(this);
 		}
 
-		final Token name;
+		final List<Token> var;
 		final Expr value;
 		final Token op;
 		@Override
 		public String toString() {
-			return name.lexeme + " := " + value;
+			return var + " ← " + value;
 		}
 	}
 
@@ -486,35 +537,68 @@ public abstract class Expr {
 			this.left = left;
 			this.operator = operator;
 			this.right = right;
+			if((isRelOp(this)) && isRelOp(right)) {
+				//LEFT:	a 
+				//      RELOP
+				//RIGHT:(b RELOP c)  ==>
+				//LEFT   a RELOP b
+				//       AND
+				//RIGHT  b RELOP c
+				Token and = new Token(Soperator.AND, "&", "&", operator.line);
+				this.left = new Binary(this.left, operator, ((Binary)right).left);
+				this.operator = and;
+				this.right = right;
+			}
 			type = left.type.equals(right.type) ? left.type :
 				left.type.equals(Type.Any) ? right.type :
 				right.type.equals(Type.Any) ? left.type:
 				widen(left.type, right.type);
 			this.line = operator.line;
 		}
+		
+		private boolean isRelOp(Expr expr) {
+			if(expr instanceof Expr.Binary) {
+				Binary bin = (Binary)expr;
+				if(isRelOperator(bin.operator)) {
+					return true;
+				}
+				return isRelOp(bin.left) && isRelOp(bin.right);
+			}
+			return false;
+		}
+
+		private boolean isRelOperator(Token tok) {
+			return tok.type == Soperator.LESS ||
+					tok.type == Soperator.LESS_EQUAL ||
+					tok.type == Soperator.GREATER ||
+					tok.type == Soperator.GREATER_EQUAL ||
+					tok.type == Soperator.EQUAL ||
+					tok.type == Soperator.NOT_EQUAL ||
+					tok.type == Soperator.EQEQ ||
+					tok.type == Soperator.NEQEQ;
+		}
 
 		private Type widen(Type t1, Type t2) {
 			
-			Object func1 = t1.interfaces.get("to" + t2);
-			Object func2 = t2.interfaces.get("to" + t1);
+			Object func1 = t1.interfaces.get(new Signature("to" + t2, t2, t1));
+			Object func2 = t2.interfaces.get(new Signature("to" + t1, t1, t2));
 
 			if (func1 != null && func1 instanceof Method) {
 				return Interpreter.typeFromClass(((Method)func1).getReturnType());
 			} else if (func2 != null && func2 instanceof Method) {
 				return Interpreter.typeFromClass(((Method)func2).getReturnType());
 			} else {
-				//System.err.println(String.format("No conversion between types %s and %s", t1, t2));
 				return Type.Void;
 			}
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitBinaryExpr(this);
 		}
 
-		final Expr left;
-		final Token operator;
-		final Expr right;
+		Expr left;
+		Token operator;
+		Expr right;
 		@Override
 		public String toString() {
 			return left + operator.lexeme +  right;
@@ -529,7 +613,7 @@ public abstract class Expr {
 			this.line = operator.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitUnaryExpr(this);
 		}
 
@@ -549,7 +633,7 @@ public abstract class Expr {
 			this.line = operator.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitPostfixExpr(this);
 		}
 
@@ -576,7 +660,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitBlockExpr(this);
 		}		
 		@Override
@@ -586,10 +670,11 @@ public abstract class Expr {
 	}
 
 	static class If extends Expr {
-		If(Token name, Expr condition, Expr thenBranch, Expr elseBranch) {
+		If(Token name, Expr condition, Expr thenBranch, Expr elseBranch, Set criteria) {
 			this.condition = condition;
 			this.thenBranch = thenBranch;
 			this.elseBranch = elseBranch;
+			this.criteria = criteria;
 			type = Type.Void;
 			this.line = name.line;
 			if(name.lexeme.equals(Keyword.UNLESS.name())) {
@@ -599,7 +684,7 @@ public abstract class Expr {
 			}
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitIfExpr(this);
 		}
 
@@ -607,6 +692,7 @@ public abstract class Expr {
 		final boolean invert; 
 		final Expr thenBranch;
 		final Expr elseBranch;
+		Set criteria;
 		@Override
 		public String toString() {
 			return (invert? "unless " : "if ") + condition + " " + thenBranch + " else " + elseBranch;
@@ -623,7 +709,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitSelectExpr(this);
 		}
 
@@ -644,14 +730,14 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitLiteralExpr(this);
 		}
 
 		final Object value;
 		@Override
 		public String toString() {
-			return value.toString();
+			return String.valueOf(value);
 		}
 	}
 	
@@ -662,14 +748,20 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		public Variable(Token name, Type type) {
+			this.name = name;
+			this.type = type;
+			this.line = name.line;
+		}
+
+		Result accept(Visitor visitor) {
 			return visitor.visitVariableExpr(this);
 		}
 
 		final Token name;
 		@Override
 		public String toString() {
-			return "var " + name.lexeme;
+			return name.lexeme;
 		}
 	}
 
@@ -677,15 +769,16 @@ public abstract class Expr {
 		TypeLiteral(Token name, Type type, Attributes attributes) {
 			this.type = Type.Type;
 			this.literal = type;
+			this.attr = attributes;
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitTypeLiteralExpr(this);
 		}
 		
 		final Type literal;
-
+		Attributes attr;
 		@Override
 		public String toString() {
 			return "type " + literal;
@@ -706,7 +799,7 @@ public abstract class Expr {
 			this.line = name.line;
 		}
 
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitTypeDefExpr(this);
 		}
 		
@@ -722,18 +815,20 @@ public abstract class Expr {
 
 	public static class Dot extends Expr {
 
-		public Dot(Expr current, Expr next) {
+		public Dot(Expr current, Expr next, boolean safe) {
 			this.current = current;
 			this.next = next;
+			this.safe = safe;
 		}
 		
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitDotExpr(this);
 		}
 
 		Expr current;
 		Expr next;
 		Expr value;
+		boolean safe;
 		@Override
 		public String toString() {
 			return current + "." + next;
@@ -742,12 +837,13 @@ public abstract class Expr {
 
 	public static class Subscript extends Expr {
 
-		public Subscript(Expr seq, Expr sub) {
+		public Subscript(Expr seq, Expr sub, boolean safe) {
 			this.seq = seq;
 			this.sub = sub;
+			this.safe = safe;
 		}
 		
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitSubscriptExpr(this);
 		}
 
@@ -755,6 +851,7 @@ public abstract class Expr {
 		Expr sub;
 		// for assignments
 		Expr value;
+		boolean safe;
 		@Override
 		public String toString() {
 			return seq + "[" + sub + "]";
@@ -763,22 +860,48 @@ public abstract class Expr {
 
 	public static class Call extends Expr {
 
-		public Call(Expr current, Expr next) {
+		public Call(Expr current, Expr.Map next, boolean safe) {
 			this.current = current;
 			this.next = next;
+			this.safe = safe;
 		}
 		
-		<R> Result accept(Visitor<R> visitor) {
+		Result accept(Visitor visitor) {
 			return visitor.visitCallExpr(this);
 		}
 
 		Expr current;
-		Expr next;
+		Expr.Map next;
+		boolean safe;
 		@Override
 		public String toString() {
 			return current + "(" + next + ")";
 		}
 	}
 
-	abstract <R> Result accept(Visitor<R> visitor);
+	public static class Import extends Expr {
+
+		public Import(Token name, String gitrepo, String filename, String qid, Map where, Attributes attributes) {
+			this.name = name;
+			this.gitrepo = gitrepo;
+			this.filename = filename;
+			this.qid = qid;
+			this.where = where;
+			this.attributes = attributes;
+		}
+
+		Token name;
+		String gitrepo;
+		String filename;
+		String qid;
+		Map where;
+		Attributes attributes;
+		
+		Result accept(Visitor visitor) {
+			return visitor.visitImportExpr(this);
+		}
+
+	}
+
+	abstract Result accept(Visitor visitor);
 }

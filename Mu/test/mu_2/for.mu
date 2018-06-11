@@ -7,13 +7,13 @@ var lst: ["a", "b", "c"]
 print "Loop over map:"
 for var i in m (
 	print i
-	typeof i
+	print i.type
 )
 
 print "Loop over set:"
 for var i in s (
 	print i
-	typeof i
+	print i.type
 )
 
 var lst: ["a", "b", "c"]

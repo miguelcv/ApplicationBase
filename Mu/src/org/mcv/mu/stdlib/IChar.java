@@ -1,7 +1,5 @@
 package org.mcv.mu.stdlib;
 
-import java.util.Arrays;
-
 public class IChar extends IType {
 	
 	public static Boolean gt(Integer a, Integer b) {
@@ -36,10 +34,6 @@ public class IChar extends IType {
 		return a != b;
 	}
 
-	public static Class<?> javaType() {
-		return Integer.class;
-	}
-
 	public static Integer plus(Integer a, Integer b) {
 		return a + b;
 	}
@@ -67,9 +61,4 @@ public class IChar extends IType {
 	public static String toString(Integer a) {
 		return new String(Character.toChars(a));
 	}
-	
-	public static void doesNotUnderstand(String op, Object o, Object...args) {
-		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
-	}
-
 }

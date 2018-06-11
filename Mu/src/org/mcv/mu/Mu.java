@@ -1,52 +1,128 @@
 package org.mcv.mu;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map.Entry;
 
+import org.mcv.math.BigInteger;
+import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Interpreter.InterpreterError;
 import org.mcv.mu.Parser.ParserError;
 import org.mcv.mu.Scanner.ScannerError;
 
 import lombok.extern.slf4j.Slf4j;
+import nl.novadoc.utils.FileUtils;
 import nl.novadoc.utils.config.Config;
 import nl.novadoc.utils.config.sources.PropertiesSource;
 
 @Slf4j
 public class Mu {
 
-	static boolean hadError = false;
-	static List<String> lines = new ArrayList<>();
-	static Environment main = new Environment("main");
-	static ListMap<Object> system;
-
-	public static void main(String[] args) {
+	boolean hadError = false;
+	List<String> lines = new ArrayList<>();
+	Environment main = new Environment("main");
+	ListMap<Object> system = new ListMap<>();
+	static Config cfg;
+	
+	public static void main(String... args) {
+		cfg = new Config(new PropertiesSource("mu.props"));
+		new Mu(args);
+	}
+	
+	public Mu(String... args) {
+		Pair<ListMap<Object>,ListMap<Object>> pair = parseArgs(args);
+		ListMap<Object> flags = pair.left;
+		ListMap<Object> arguments = pair.right;
+		
+		/* reset deps file: -reset-deps */
+		if(flags.containsKey("reset-deps")) {
+			resetDeps((String)arguments.get(0));
+		}
+		
+		/* system properties: -key:value */
+		for(Entry<String, Object> entry :  flags.entrySet()) {
+			system.put(entry.getKey(), entry.getValue());
+		}
+		
 		initializeStdLib();
-		if (args.length > 1) {
-			System.out.println("Usage: mu [script]");
-		} else if (args.length == 1) {
-			runFile(args[0]);
+		for(Entry<String, Object> entry : arguments.entrySet()) {
+			main.define(entry.getKey(), new Result(entry.getValue(), Interpreter.typeFromClass(entry.getValue().getClass())), false, true);
+		}
+		main.define("$arguments", new Result(arguments, new Type.MapType(Type.Any)), false, true);
+
+		if(flags.containsKey("eval")) {
+			return;
+		} else if(arguments.isEmpty()) {
+			runPrompt();			
 		} else {
-			runPrompt();
+			runFile((String)arguments.get(0));
 		}
 	}
 
-	static void runFile(String path) {
-		runFileNoExit(path);
-		if (hadError)
-			System.exit(65);
+	private void resetDeps(String file) {
+		File depsfile = new File(file + ".deps");	
+		depsfile.delete();
 	}
 
-	static void runFileNoExit(String path) {
+	public Pair<ListMap<Object>,ListMap<Object>> parseArgs(String[] args) {
+		ListMap<Object> flags = new ListMap<>();
+		ListMap<Object> nonflags = new ListMap<>();
+		
+		for(String arg : args) {
+			boolean isFlag = false;
+			
+			while(arg.startsWith("-") || arg.startsWith("/")) {
+				isFlag = true;
+				arg = arg.substring(1);
+			}
+			
+			String[] kv;
+			if(arg.indexOf('=') >= 0) {
+				kv = arg.split("=");
+			} else if(arg.indexOf(':') >= 0 && arg.indexOf(":\\") == -1) {
+				kv = arg.split(":");
+			} else {
+				kv = new String[]{arg};
+			}
+			if(kv.length == 2) {
+				(isFlag ? flags : nonflags).put(kv[0], convert(kv[1]));
+			} else if(kv.length == 1) {
+				if(isFlag) flags.put(arg, true);
+				else nonflags.put(arg, arg);
+			} else {
+				// error
+			}
+		}
+		return new Pair<>(flags, nonflags);
+	}
+
+	Object convert(String s) {
+		if(s.equals("true")) return true;
+		if(s.equals("false")) return false;
+		try {
+			return BigInteger.valueOf(Integer.parseInt(s));
+		} catch(Exception e) {
+			return s;
+		}
+	}
+	
+	void runFile(String file) {
 		String toRun = "";
 		try {
-			lines = Files.readAllLines(Paths.get(path));
+			Path path = Paths.get(file);
+			system.put("currentDirectory", path.getParent().toString());
+			system.put("currentFile", path.toString());
+
+			lines = Files.readAllLines(path);
 			List<String> normalized = new ArrayList<>();
 			for(String line : lines) {
 				/* trim all lines */
@@ -67,8 +143,8 @@ public class Mu {
 		run(toRun);
 	}
 
-	private static Form getNormalization() {
-		String norm = (String) system.getOrDefault("unicodeNormalization", "NFD");
+	public Form getNormalization() {
+		String norm = cfg.getString("unicodeNormalization", "NFD");
 		switch(norm) {
 		case "NFC": return Form.NFC;
 		case "NFD": return Form.NFD;
@@ -78,7 +154,7 @@ public class Mu {
 		}
 	}
 
-	public static String trimTrailing(String str) {
+	public String trimTrailing(String str) {
 		if(str == null)
 	      return null;
 	    int len = str.length();
@@ -89,8 +165,10 @@ public class Mu {
 	    return str.substring(0, len);
 	}
 	
-	static void runPrompt() {
+	void runPrompt() {
 		try {
+			system.put("currentDirectory", System.getProperty("user.dir"));
+
 			InputStreamReader input = new InputStreamReader(System.in, "UTF-8");
 			BufferedReader reader = new BufferedReader(input);
 
@@ -121,8 +199,8 @@ public class Mu {
 		}
 	}
 
-	static void initializeStdLib() {
-		/* standard types */
+	void initializeStdLib() {
+		/* standard types */		
 		main.define("None", new Result(Type.None, Type.Type), false, true);
 		main.define("Void", new Result(Type.Void, Type.Type), false, true);
 		main.define("Any", new Result(Type.Any, Type.Type), false, true);
@@ -133,59 +211,70 @@ public class Mu {
 		main.define("String", new Result(Type.String, Type.Type), false, true);
 		main.define("Type", new Result(Type.Type, Type.Type), false, true);
 		
-		system = new ListMap<>();
-		Config cfg = new Config(new PropertiesSource("mu.props"));
-		system.put("spacesToATab", Integer.parseInt(cfg.getString("spacesToATab", "4")));
-		system.put("maxRawStringTerminator", Integer.parseInt(cfg.getString("maxRawStringTerminator", "8")));
-		system.put("unicodeNormalization", cfg.getString("unicodeNormalization", "NFD"));
-		system.put("DEBUG", Boolean.valueOf(cfg.getString("DEBUG", "false")));
-		main.define("System", new Result(system, new Type.MapType(Type.String, Type.Any)), true, true);
+		main.define("Inf", new Result(BigInteger.POSITIVE_INFINITY, Type.Int), false, true);
+		main.define("NaN", new Result(BigInteger.NAN, Type.Int), false, true);
+		
+		system.put("user", System.getProperty("user.name"));
+		system.put("arch", System.getProperty("os.arch"));
+		system.put("os", System.getProperty("os.name"));
+		system.put("osVersion", System.getProperty("os.version"));
+		
+		main.define("system", new Result(system, new Type.MapType(Type.Any)), true, true);
 	}
 
-	private static void run(String source) {
-		System.err.println("Scanning...");
-		Scanner scanner = new Scanner(source, main);
+	private void run(String source) {
+		Scanner scanner = new Scanner(source, main, this);
 		List<Token> tokens = scanner.scanTokens();
 		System.err.flush();		
-		System.err.println("Parsing...");
-		Parser parser = new Parser(tokens, main);
+		Parser parser = new Parser(tokens, main, this);
 		List<Expr> statements = parser.parse();
 
 		// Stop if there was a syntax error.
 		if (hadError) {
 			System.err.println("Had errors: program will not run...");
-			System.err.flush();		
+			System.err.flush();
+			hadError = false;
 			return;
 		}
 		
 		System.err.flush();		
-		System.err.println("Running...");
-		new Interpreter(main).interpret(statements);
+		Interpreter intr = new Interpreter(main, this);
+		// define $this...
+		String path = (String)system.get("currentFile");
+		if(path != null) {
+			String funcname = FileUtils.getFileNameWithoutExtension(new File(path));
+			Template mainFunc = new Template(funcname, main);
+			main.define("$this", new Result(mainFunc, new Type.SignatureType((TemplateDef)mainFunc.def)), false, true);
+		}
+		intr.interpret(statements);		
 	}
 
-	public static Expr parse(String source) {
-		Scanner scanner = new Scanner(source, main);
+	public Expr parse(String source) {
+		Scanner scanner = new Scanner(source, main, this);
 		List<Token> tokens = scanner.scanTokens();
-		Parser parser = new Parser(tokens, main);
+		Parser parser = new Parser(tokens, main, this);
 		List<Expr> statements = parser.parse();
 
 		// Stop if there was a syntax error.
-		if (hadError)
+		if (hadError) {
+			hadError = false;
 			return null;
-
+		}
 		return statements.get(statements.size() - 1);
 	}
 
 
-	public static Result eval(String source) {
-		Scanner scanner = new Scanner(source, main);
+	public Result eval(String source) {
+		Scanner scanner = new Scanner(source, main, this);
 		List<Token> tokens = scanner.scanTokens();
-		Parser parser = new Parser(tokens, main);
+		Parser parser = new Parser(tokens, main, this);
 		List<Expr> statements = parser.parse();
 		// Stop if there was a syntax error.
-		if (hadError)
+		if (hadError) {
+			hadError = false;
 			return null;
-		Interpreter interpreter = new Interpreter(main);
+		}
+		Interpreter interpreter = new Interpreter(main, this);
 		Result result = null; 
 		for(Expr expr : statements) {
 			result = interpreter.evaluate(expr);
@@ -193,14 +282,14 @@ public class Mu {
 		return result;
 	}
 
-	static void error(Exception e) {
+	void error(Exception e) {
 		hadError = true;
 		if(e instanceof MuException) {
 			MuException mue = (MuException)e;
-			System.err.println("Uncaught exception at: " + mue.line + " (" + mue.expr + "): " + mue.getMessage());
+			System.err.println("Uncaught exception at: " + mue.line + " (" + mue.expr + "): " + mue.value);
 		} else if(e instanceof InterpreterError) {
 			InterpreterError ie = (InterpreterError)e;
-			System.err.println("Runtime error at: " + ie.line + " (" + ie.expr + "): " + ie.getMessage());
+			System.err.println("Runtime error at: " + (ie.line+1) + " (" + ie.expr + "): " + ie.getMessage());
 		} else if(e instanceof ParserError) {
 			ParserError pe = (ParserError)e;
 			System.err.println("Parse error at: " + pe.line + " (" + pe.tok + "): " + pe.getMessage());
@@ -210,12 +299,12 @@ public class Mu {
 		} else {
 			System.err.println("General error " + e.toString());
 		}
-		if((Boolean)system.getOrDefault("DEBUG", "false")) {
+		if(cfg.getString("DEBUG", "false").equals("true")) {
 			log.error(e.toString(), e);
 		}
 	}
 	
-	static String getLine(int lineno) {
+	String getLine(int lineno) {
 		return lines.get(lineno);
 	}
 }

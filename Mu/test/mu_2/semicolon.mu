@@ -12,7 +12,6 @@ for var i in s (
 	print i;
 )
 
-
 var lst: ["a", "b", "c"];
 
 for var i in lst ( 

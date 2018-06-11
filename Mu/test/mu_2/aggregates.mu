@@ -1,12 +1,20 @@
+var s2: set(Int)
+s2 := {8,8,8,8,8,8}
+print s2
+
+
 // lists
+
 var l: [1, 2, 3, 4]
-// TODO make this OK with union types
-//var badList: [1, "b"]
+
+var mixList: [1, "b"]
 print l
-print "expect 2: " & l[1]
+assert l[1]=2 "result should be 2 but is #{l[1]}"
+//print "expect 2: " & l[1]
 //print l[11]
 l[0] := 100
 print l[0]
+assert l[0]=100 "result should be 100 but is #{l[0]}"
 print l
 
 // sets

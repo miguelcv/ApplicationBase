@@ -8,9 +8,9 @@ print a := 8
 
 /* initialize with Type */
 var x: String
-typeof x
+print x.type
 var y: Int
-typeof y
+print y.type
 print x := "Hello"
 
 // y := "World"	// error

@@ -1,3 +1,10 @@
+// divide by zero:
+error $this: (
+	print "Top level error handler: #{$exception}"
+)
+
+var z: 7/0
+
 var s: "String"
 var i: 10
 var c: 'c'
@@ -26,27 +33,6 @@ print i | i2
 //print c | c2
 print b | b2
 //print r | r2
-
-//GCD
-//print s gcd s2
-print i gcd i2
-//print c gcd c2
-//print b gcd b2
-//print r gcd r2
-
-//MAX
-print s max s2
-print i max i2
-print c max c2
-print b max b2
-print r max r2
-
-//MIN
-print s min s2
-print i min i2
-print c min c2
-print b min b2
-print r min r2
 
 //GREATER
 print s > s2

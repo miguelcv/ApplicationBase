@@ -1,7 +1,5 @@
 package org.mcv.mu.stdlib;
 
-import java.util.Arrays;
-
 public class IBool extends IType {
 
 	public static Boolean eq(Boolean a, Boolean b) {
@@ -18,10 +16,6 @@ public class IBool extends IType {
 
 	public static Boolean neqeq(Boolean a, Boolean b) {
 		return !a.equals(b);	
-	}
-
-	public static Class<?> javaType() {
-		return Boolean.class;
 	}
 	
 	public static Boolean inc(Boolean b) {
@@ -72,12 +66,7 @@ public class IBool extends IType {
 		return a ? b : a;
 	}
 
-	public static String toString(Object a) {
+	public static String toString(Boolean a) {
 		return String.valueOf(a);
 	}
-	
-	public static void doesNotUnderstand(String op, Object o, Object...args) {
-		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
-	}
-
 }

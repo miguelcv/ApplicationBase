@@ -1,7 +1,5 @@
 package org.mcv.mu.stdlib;
 
-import java.util.Arrays;
-
 import org.mcv.math.BigInteger;
 
 public class IInt extends IType {
@@ -52,11 +50,6 @@ public class IInt extends IType {
 		return !eq(a, b);
 	}
 
-	// MISC
-	public static Class<?> javaType() {
-		return BigInteger.class;
-	}
-
 	// PLUS/MINUS
 	public static BigInteger plus(BigInteger a, BigInteger b) {
 		return a.add(b);
@@ -79,14 +72,6 @@ public class IInt extends IType {
 	}
 
 	// MULT/DIV
-	//public static BigBigIntegerX div(BigBigIntegerX a, BigBigIntegerX b) {
-	//	return a.divide(b);
-	//}
-	
-	//public static BigBigIntegerX rem(BigBigIntegerX a, BigBigIntegerX b) {
-	//	return a.remainder(b);
-	//}
-
 	/* Euclidean division */
 	public static BigInteger div(BigInteger a, BigInteger b)
 	{
@@ -186,9 +171,4 @@ public class IInt extends IType {
 	public static Double toReal(BigInteger a) {
 		return a.doubleValue();
 	}
-	
-	public static void doesNotUnderstand(String op, Object o, Object...args) {
-		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
-	}
-
 }

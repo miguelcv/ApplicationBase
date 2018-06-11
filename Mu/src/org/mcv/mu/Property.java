@@ -3,51 +3,37 @@ package org.mcv.mu;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.mcv.mu.Params.ParamFormal;
-
-public class Property extends Template {
+public class Property {
 	
-	public Property(Token id, Type type, Environment env) {
-		this.name = id.lexeme;
-		this.id = id;
-		kind = "fun";
-		attributes = new Attributes();
-		returnType = type;
-		closure = env;
+	Token valueToken = new Token(Soperator.ID, "$value", "$value", -1);
+	Token newToken = new Token(Soperator.ID, "$new", "$new", -1);
+	Token opToken = new Token(Soperator.ASSIGN, ":=", ":=", -1);
+	
+	public Property(boolean mutable, String name, Result var) {
+		this.var = var;
+		this.name = name;
+		get = mkGetter();
+		if(mutable) {
+			set = mkSetter();
+		}
 	}
 	
-	Token id;
-	boolean ro;
-	Type type;
+	String name;
+	Result var;
+	Expr.Block get;
+	Expr.Block set;
 	
-	Property mkSetter(Object value) {
-		Property setter = new Property(id, type, closure);
-		ParamFormal f = new ParamFormal("value", Interpreter.typeFromValue(value), null, attributes);
-		setter.params = new Params();	
-		setter.params.add(f);
-		setter.returnType = Type.Void;
-		List<Expr> exprs = new ArrayList<>();
-		Expr lit = new Expr.Literal(id, value);
-		Expr assign = new Expr.Assign(id, lit, new Token(Soperator.ASSIGN, ":=", null, -1));
-		exprs.add(assign);		
-		setter.body = new Expr.Block(Token.DUMMY, exprs);
-		setter.def = new Expr.TemplateDef(id, "fun", setter.params, Type.Void, setter.body, attributes);
-		return setter;
+	Expr.Block mkGetter() {
+		Token nameToken = new Token(Soperator.ID, name, name, -1);
+		List<Expr> expressions = new ArrayList<>();
+		expressions.add(new Expr.Variable(valueToken));
+		return new Expr.Block(nameToken, expressions);
 	}
 
-	Property mkGetter() {
-		Property getter = new Property(id, type, closure);
-		getter.params = new Params();
-		List<Expr> exprs = new ArrayList<>();
-		Expr var = new Expr.Variable(id);
-		exprs.add(var);		
-		getter.body = new Expr.Block(Token.DUMMY, exprs);
-		getter.def = new Expr.TemplateDef(id, "fun", getter.params, returnType, getter.body, attributes);
-		return getter;
+	Expr.Block mkSetter() {
+		Token nameToken = new Token(Soperator.ID, name, name, -1);
+		List<Expr> expressions = new ArrayList<>();
+		expressions.add(new Expr.Assign(valueToken, new Expr.Variable(newToken), opToken));
+		return new Expr.Block(nameToken, expressions);
 	}
-
-	@Override public String toString() {
-		return "property " + name;
-	}
-
 }

@@ -1,6 +1,6 @@
 package org.mcv.mu.stdlib;
 
-import java.util.Arrays;
+import org.mcv.mu.Interpreter;
 
 public class IAny extends IType {
 	
@@ -11,7 +11,7 @@ public class IAny extends IType {
 		if(a instanceof Comparable && b instanceof Comparable) {
 			return ((Comparable<Object>)a).compareTo((Comparable<Object>)b) > 0;
 		}
-		throw new TypeError(TYPES_ARE_NOT_COMPARABLE);
+		throw new Interpreter.InterpreterError(TYPES_ARE_NOT_COMPARABLE);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -19,7 +19,7 @@ public class IAny extends IType {
 		if(a instanceof Comparable && b instanceof Comparable) {
 			return ((Comparable<Object>)a).compareTo((Comparable<Object>)b) >= 0;
 		}
-		throw new TypeError(TYPES_ARE_NOT_COMPARABLE);		
+		throw new Interpreter.InterpreterError(TYPES_ARE_NOT_COMPARABLE);		
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -27,7 +27,7 @@ public class IAny extends IType {
 		if(a instanceof Comparable && b instanceof Comparable) {
 			return ((Comparable<Object>)a).compareTo((Comparable<Object>)b) < 0;
 		}
-		throw new TypeError(TYPES_ARE_NOT_COMPARABLE);		
+		throw new Interpreter.InterpreterError(TYPES_ARE_NOT_COMPARABLE);		
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -35,7 +35,7 @@ public class IAny extends IType {
 		if(a instanceof Comparable && b instanceof Comparable) {
 			return ((Comparable<Object>)a).compareTo((Comparable<Object>)b) <= 0;
 		}
-		throw new TypeError(TYPES_ARE_NOT_COMPARABLE);	
+		throw new Interpreter.InterpreterError(TYPES_ARE_NOT_COMPARABLE);	
 	}
 	
 	public static Boolean eq(Object a, Object b) {
@@ -54,19 +54,7 @@ public class IAny extends IType {
 		return !eqeq(a, b);
 	}
 
-	public static Class<?> javaType() {
-		return Object.class;
-	}
-
-	public static Boolean isTrue(Object a) {
-		return a != null;
-	}
-	
 	public static String toString(Object a) {
 		return String.valueOf(a);
-	}
-	
-	public static void doesNotUnderstand(String op, Object o, Object...args) {
-		System.err.println(o.toString() + " does not understand method " + op + " with args " + Arrays.deepToString(args));
-	}
+	}	
 }

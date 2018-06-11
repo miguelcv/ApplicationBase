@@ -30,8 +30,7 @@ print '@{\Sigma}'
 /* Unicode operators etc. */
 var empty: Ø
 print empty
-// TODO: should be OK
-// empty ← {1, 2, 3}
+empty ← {1, 2, 3}
 
 var mp: (a → 2, b → 4)
 for i in mp

@@ -1,5 +1,6 @@
 // escaped identifiers
 var `map: (a => "b", b => "c")
+print `map
 
 // functions:
 // definition
@@ -13,7 +14,7 @@ fun test2(Int arg1: 1, Int arg2: 10, Int arg3: 100) => Int : (
 
 fun test3(Int arg1, String arg2, Real arg3, *) : (
 	print "I was called with: #{arg1} #{arg2} #{arg3}"
-	if rest (print "extra params #{rest}")
+	if $rest (print "extra params #{$rest}")
 	else (print "no extra params")
 )
 
@@ -59,16 +60,6 @@ fun lam(Int x) => fun() => Int : (
 
 print lam(3)() // expect 4
 
-fun oo(Int x) => Int: (
-	fun ii(Int y) => Int: (
-		y * 2
-	)
-	x / 2
-)
-
-print oo.ii(3)
-//return "ok"
-
 // local
 fun ooo(Int x) => Int: (
 	local fun iii(Int y) => Int: (
@@ -106,14 +97,15 @@ print withReturn(0)
 print withReturn(1)
 
 var a: "global"
-
-fun showA(): (
+(
+	fun showA(): (
 	    print a
-)
+	)
 
-showA()
-var a: "block"
-showA()
+	showA()
+	var a: "block"
+	showA()
+)
 
 // curry => see curry.mu
 // aop => see aop.mu

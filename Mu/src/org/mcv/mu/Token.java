@@ -24,7 +24,7 @@ class Token {
 	}
 
 	public String toString() {
-		return type.toString();
+		return type.toString() + " " + lexeme;
 	}
 	
 	@Override public boolean equals(Object other) {

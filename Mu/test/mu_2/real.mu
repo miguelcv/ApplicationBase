@@ -13,5 +13,5 @@ print 3.2e-7
 print 300_000_000.25_55e7
 
 print NaN
-print INF
-print -INF
+print Inf
+print -Inf

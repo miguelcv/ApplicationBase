@@ -22,7 +22,6 @@ public class Main {
 	public static void main(String... args) {
 
 		int docs = 5;
-
 		for (int i = 0; i < docs; i++) {
 			System.out.println("Generating document " + (i+1));
 			nwords = 0;

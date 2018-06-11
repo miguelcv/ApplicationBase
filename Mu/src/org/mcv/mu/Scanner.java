@@ -3,6 +3,11 @@ package org.mcv.mu;
 import static org.mcv.mu.Keyword.*;
 import static org.mcv.mu.Soperator.*;
 import org.mcv.math.BigInteger;
+import org.mcv.uom.Bag;
+import org.mcv.uom.Unit;
+import org.mcv.uom.UnitValue;
+import org.mcv.uom.UoMError;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -15,8 +20,8 @@ class Scanner {
 	private int current = 0;
 	private int line = 1;
 	private static final int BOM = 0xFEFF;
-	private ListMap<Object> system;
 	private int maxTerminator;
+	private Mu handler;
 	
 	static class ScannerError extends RuntimeException {
 		private static final long serialVersionUID = 1L;
@@ -32,11 +37,10 @@ class Scanner {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
-	Scanner(String source, Environment main) {
+	Scanner(String source, Environment main, Mu mu) {
 		this.source = source;
-		this.system = (ListMap<Object>)main.get("System").value;
-		maxTerminator = (int)system.getOrDefault("maxRawStringTerminator", 8);
+		this.handler = mu;
+		maxTerminator = Integer.parseInt(Mu.cfg.getString("maxRawStringTerminator", "8"));
 	}
 
 	List<Token> scanTokens() {
@@ -49,7 +53,7 @@ class Scanner {
 					ScannerError se = new ScannerError(e);
 					se.cp = isAtEnd() ? 0 : source.codePointAt(current);
 					se.line = line;
-					Mu.error(se);
+					handler.error(se);
 				}
 			}
 			tokens.add(new Token(EOF, "", null, line));
@@ -58,7 +62,7 @@ class Scanner {
 		} catch (ScannerError e) {
 			e.cp = source.codePointAt(current);
 			e.line = line;
-			Mu.error(e);
+			handler.error(e);
 			return List.of();
 		}
 	}
@@ -200,7 +204,7 @@ class Scanner {
 			if (match('('))
 				addToken(LEFT_PAREN);
 			line++;
-			python();
+			if(peek() != '\n') python();
 			break;
 		case ';':
 			addToken(SEMICOLON);
@@ -244,17 +248,11 @@ class Scanner {
 		case '#':
 			addToken(SHARP);
 			break;
-		case '$':
-			addToken(DOLLAR);
-			break;
-		case '_':
-			addToken(UNDERSCORE);
-			break;
 		case '\\':
 			addToken(BACKSLASH);
 			break;
 		case '?':
-			addToken(QUESTION);
+			addToken(match('.') ? SAFENAV : match('[') ? SAFESUB : match('(') ? SAFECALL : QUESTION);
 			break;
 		case ',':
 			addToken(COMMA);
@@ -271,6 +269,10 @@ class Scanner {
 		case '→':
 			addToken(ARROW);
 			break;
+		case '↑':
+			addToken(UPARROW);
+			break;
+			
 		case 'Ø':
 		case '∅':
 			addToken(EMPTY_SET);
@@ -351,12 +353,12 @@ class Scanner {
 			break;
 
 		default:
-			if (isDigit(c)) {
-				number();
-			} else if (isAlpha(c)) {
+			if(isAlpha(c)) {
 				identifier();
+			} else if (isDigit(c)) {
+				number();
 			} else if (isOperator(c)) {
-				addToken(OPERATOR);
+				addToken(OP);
 			} else {
 				throw new ScannerError("Unexpected character " + new String(Character.toChars(c)));
 			}
@@ -390,7 +392,7 @@ class Scanner {
 		if (isAtEnd())
 			return 0;
 		int ret = 0;
-		int spacesToATab = (int) system.getOrDefault("spacesToATab", 4);
+		int spacesToATab = Integer.parseInt(Mu.cfg.getString("spacesToATab", "4"));
 		for (int i = current; i < source.length(); i++) {
 			int c = source.codePointAt(i);
 			if (c == '\t') {
@@ -410,6 +412,7 @@ class Scanner {
 	}
 
 	private void ccomment() {
+		boolean terminated = false;
 		advance();
 		int nesting = 1;
 		loop: while (true) {
@@ -420,6 +423,7 @@ class Scanner {
 					if (nesting == 0) {
 						advance();
 						advance();
+						terminated = true;
 						break loop;
 					}
 				}
@@ -434,12 +438,14 @@ class Scanner {
 			case '\n':
 				++line;
 				break;
-
 			default:
 				if (isAtEnd())
 					break loop;
 			}
 			advance();
+		}
+		if(!terminated) {
+			throw new ScannerError("Unterminated comment");
 		}
 	}
 
@@ -455,6 +461,10 @@ class Scanner {
 	private void addToken(TokenType type, Object literal) {
 		String text = source.substring(start, current);
 		tokens.add(new Token(type, text, literal, line));
+	}
+
+	private void addFullToken(TokenType type, String text) {
+		tokens.add(new Token(type, text, text, line));
 	}
 
 	private boolean match(int expected) {
@@ -618,7 +628,7 @@ class Scanner {
 			advance();
 			while (isDigit(peek(), radix))
 				advance();
-			addToken(INT, new BigInteger(strip(source.substring(start, current)), radix));
+			addTokenWithUnit(INT, new BigInteger(strip(source.substring(start, current)), radix));
 		}
 		// Look for a fractional/exponent part.
 		else if (peek() == '.' && isDigit(peekNext())) {
@@ -634,7 +644,7 @@ class Scanner {
 				while (isDigit(peek()))
 					advance();
 			}
-			addToken(REAL, Double.valueOf(strip(source.substring(start, current))));
+			addTokenWithUnit(REAL, Double.valueOf(strip(source.substring(start, current))));
 		} else if (peek() == 'e' || peek() == 'E') {
 			if (peekNext() == '+' || peekNext() == '-') {
 				advance();
@@ -642,10 +652,103 @@ class Scanner {
 			advance();
 			while (isDigit(peek()))
 				advance();
-			addToken(REAL, Double.valueOf(strip(source.substring(start, current))));
+			addTokenWithUnit(REAL, Double.valueOf(strip(source.substring(start, current))));
 		} else {
-			addToken(INT, new BigInteger(strip(source.substring(start, current))));
+			addTokenWithUnit(INT, new BigInteger(strip(source.substring(start, current))));
 		}
+	}
+
+	
+	private void addTokenWithUnit(Soperator kind, Object value) {
+		/* Check if Int/Real literal is followed by UnitSpec */
+		/* e.g. 3_km/h */
+		if(previous() == '_') {
+			Bag units = unitSpec();
+			if(units != null) {
+				Double dvalue = 0.0;
+				if(value instanceof BigInteger) {
+					dvalue = ((BigInteger)value).doubleValue();
+				} else if(value instanceof Double) {
+					dvalue = (Double)value;
+				}
+				UnitValue uval = new UnitValue(dvalue, units);
+				addToken(UNITLIT, uval);
+			}
+		}
+		addToken(kind, value);
+	}
+
+	public Bag unitSpec() {
+		// prefixunit[^power][(/|*)prefixunit[^power]]...
+		try {
+			Bag units = new Bag();
+
+			Unit unit = parseUnit();
+			if(unit == null) return null;
+
+			units.add(unit);
+
+			loop: for (;;) {
+
+				int c = peek();
+				switch (c) {
+				case '/':
+					unit = parseUnit();
+					unit.pow = -unit.pow;
+					units.add(unit);
+					break;
+				case '*':
+					unit = parseUnit();
+					units.add(unit);
+					break;
+				case -1:
+				case ' ':
+				case '\n':
+				case '\r':
+				default:
+					break loop;
+				}
+			}			
+			return units;
+			
+		} catch (Exception e) {
+			throw new UoMError("Bad unit literal: %s", e);
+		}
+	}
+
+	Unit parseUnit() {
+		try {
+			StringBuilder sb = new StringBuilder();
+			for (;;) {
+				int c = peek();
+				//25..28
+				if (Character.isAlphabetic(c) || Character.isDigit(c) || 
+						// Unicode SYMBOLs
+						Character.getType(c) >= 25 && Character.getType(c) <= 28) {
+					sb.append((char)c);
+					advance();
+				} else {
+					break;
+				}
+			}
+			String prefixedUnit = sb.toString();
+			if(prefixedUnit.length() == 0) {
+				return null;
+			}
+			int pow = 1;
+			if(prefixedUnit.contains("^")) {
+				String[] ss = prefixedUnit.split("\\^");
+				prefixedUnit = ss[0];
+				pow = Integer.parseInt(ss[1]);
+			}
+			return new Unit(prefixedUnit, pow);
+		} catch (Exception e) {
+			throw new UoMError("Bad unit literal: " + e);
+		}
+	}
+
+	private int previous() {
+		return source.codePointAt(current -1);
 	}
 
 	private String strip(String s) {
@@ -685,6 +788,13 @@ class Scanner {
 		} else {
 			if (Character.isUpperCase(text.codePointAt(0))) {
 				type = TID;
+				if(peek()=='?') {
+					advance();
+					addFullToken(TID, text);
+					addToken(OR);
+					addFullToken(TID, "Void");
+					return;
+				}
 			} else {
 				type = ID;
 			}
@@ -694,8 +804,7 @@ class Scanner {
 
 	private boolean isKeyword(String id) {
 		try {
-			Keyword.valueOf(id.toUpperCase());
-			return true;
+			return Keyword.valueOf(id.toUpperCase()).name().toLowerCase().equals(id);
 		} catch (IllegalArgumentException e) {
 			return false;
 		}

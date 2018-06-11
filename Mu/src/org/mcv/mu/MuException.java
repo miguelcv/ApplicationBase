@@ -10,6 +10,14 @@ public class MuException extends RuntimeException {
 		this.value = value;
 	}
 
+	public Object getValue() {
+		return value.value;
+	}
+
 	private static final long serialVersionUID = 1L;
+	
+	@Override public String toString() {
+		return String.valueOf(value.value);
+	}
 
 }

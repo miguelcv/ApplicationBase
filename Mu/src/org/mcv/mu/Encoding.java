@@ -9,6 +9,7 @@ import nl.novadoc.utils.FileUtils;
 public class Encoding {
 
 	static Map<String, Integer> unicodeNames = new LinkedHashMap<>();
+	static Map<Integer, String> unicode = new LinkedHashMap<>();
 	static Map<String, Integer> latexEscapes = new LinkedHashMap<>();
 
 	static {
@@ -19,6 +20,7 @@ public class Encoding {
 			String[] keys = vk[1].split(",");
 			for(String key : keys) {
 				unicodeNames.put(key, fromHex(vk[0]));
+				unicode.put(fromHex(vk[0]), keys[0]);
 			}
 		}
 		f = new File("LaTeX.txt");
@@ -68,5 +70,9 @@ public class Encoding {
 		if (cp == -1)
 			return fromHex(name);
 		return cp;
+	}
+
+	public static String toUnicodeName(int value) {
+		return unicode.get(value);
 	}
 }

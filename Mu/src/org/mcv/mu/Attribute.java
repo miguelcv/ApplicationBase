@@ -9,8 +9,10 @@ public enum Attribute implements TokenType {
 	PROP,
 	/* class/own variable */
 	OWN,
+	/* mixin var/params */
+	MIXIN,
 	/* doc comment */
-	DOC
-	/* perhaps later... */
-	//EXTERN func, ABSTRACT func ,VOLATILE var, ASYNC func, TRANSIENT var,
+	DOC,
+	/* thunk */
+	THUNK
 }

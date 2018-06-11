@@ -1,103 +1,92 @@
 package org.mcv.mu.stdlib;
 
-import java.util.Arrays;
-
 public class IReal extends IType {
 
-	public static Boolean gt(double a, double b) {
+	public static Boolean gt(Double a, Double b) {
 		return a > b;
 	}
 
-	public static Boolean ge(double a, double b) {
+	public static Boolean ge(Double a, Double b) {
 		return a >= 0;
 	}
 	
-	public static Boolean lt(double a, double b) {
+	public static Boolean lt(Double a, Double b) {
 		return a < 0;
 	}
 	
-	public static Boolean le(double a, double b) {
+	public static Boolean le(Double a, Double b) {
 		return a <= 0;
 	}
 	
-	public static Boolean eq(double a, double b) {
+	public static Boolean eq(Double a, Double b) {
 		return a == b;
 	}
 	
-	public static Boolean neq(double a, double b) {
+	public static Boolean neq(Double a, Double b) {
 		return a != b;
 	}
 
-	public static Boolean eqeq(double a, double b) {
+	public static Boolean eqeq(Double a, Double b) {
 		return a == b;
 	}
 	
-	public static Boolean neqeq(double a, double b) {
+	public static Boolean neqeq(Double a, Double b) {
 		return a != b;
 	}
 
-	public static Class<?> javaType() {
-		return Double.class;
-	}
-
-	public static double plus(double a, double b) {
+	public static Double plus(Double a, Double b) {
 		return a + b;
 	}
 
-	public static double minus(double a, double b) {
+	public static Double minus(Double a, Double b) {
 		return a - b;
 	}
 
-	public static double neg(double a) {
+	public static Double neg(Double a) {
 		return -a;
 	}
 
-	public static double inc(double a) {
+	public static Double inc(Double a) {
 		return a + 1;
 	}
 	
-	public static double dec(double a) {
+	public static Double dec(Double a) {
 		return a - 1;
 	}
 
-	public static double div(double a, double b) {
+	public static Double div(Double a, Double b) {
 		return a / b;
 	}
 	
-	public static double rem(double a, double b) {
+	public static Double rem(Double a, Double b) {
 		return a % b;
 	}
 
-	public static double mul(double a, double b) {
+	public static Double mul(Double a, Double b) {
 		return a * b;
 	}
 
-	public static double pow(double a, double b) {
+	public static Double pow(Double a, Double b) {
 		return Math.pow(a, b);
 	}
 
-	public static double abs(double a) {
+	public static Double abs(Double a) {
 		return Math.abs(a);
 	}
 	
-	public static double max(double a, double b) {
+	public static Double max(Double a, Double b) {
 		return Math.max(a, b);
 	}
 	
-	public static double min(double a, double b) {
+	public static Double min(Double a, Double b) {
 		return Math.min(a, b);
 	}
 	
-	public static double sqrt(double a) {
+	public static Double sqrt(Double a) {
 		return Math.sqrt(a);
 	}
 	
-	public static String toString(Object a) {
+	public static String toString(Double a) {
 		return String.valueOf(a);
 	}
-	
-	public static void doesNotUnderstand(String op, Object o, Object...args) {
-		System.err.println(o.toString() + " does not understand mathod " + op + " with args " + Arrays.deepToString(args));
-	}
-
 }

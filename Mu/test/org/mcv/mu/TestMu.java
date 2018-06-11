@@ -22,8 +22,7 @@ public class TestMu {
 			--len;
 			System.out.println("Running " + file);
 			try {
-				Mu.initializeStdLib();
-				Mu.runFileNoExit(file);
+				Mu.main(file);
 			} catch(Throwable e) {
 				log.error(e.toString(), e);
 			}

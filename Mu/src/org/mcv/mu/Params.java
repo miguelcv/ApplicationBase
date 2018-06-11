@@ -1,6 +1,10 @@
 package org.mcv.mu;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map.Entry;
+
+import org.mcv.mu.Expr.Map;
 import org.mcv.mu.Interpreter.InterpreterError;
 import lombok.Data;
 import lombok.NonNull;
@@ -10,28 +14,31 @@ public class Params {
 	@Data
 	public static class ParamFormal {
 		
-		public ParamFormal(@NonNull String id, @NonNull Type type, Object defval, Attributes attr) {
+		public ParamFormal(@NonNull String id, @NonNull Type type, Object defval, Map where, Attributes attr) {
 			this.id = id;
 			this.type = type;
 			this.defval = defval;
 			this.attributes = attr;
+			this.where = where;
 		}
 
-		ParamFormal(@NonNull String id, @NonNull Type type, Object defval, Object value, Attributes attr, boolean defined) {
+		ParamFormal(@NonNull String id, @NonNull Type type, Object defval, Object value, Map where, Attributes attr, boolean defined) {
 			this.id = id;
 			this.type = type;
 			this.defval = defval;
 			this.defined = defined;
 			this.val = value;
 			this.attributes = attr;
+			this.where = where;
 		}
 
 		final String id;
-		final Type type;
+		Type type;
 		Object defval;
 		boolean defined;
 		Object val;
 		final Attributes attributes;
+		Expr.Map where;
 		
 		@Override
 		public String toString() {
@@ -45,6 +52,7 @@ public class Params {
 	ParamFormal[] tmp = new ParamFormal[0];
 	boolean vararg;
 	boolean curry;
+	boolean mutable;
 	
 	public Params() {		
 	}
@@ -60,7 +68,7 @@ public class Params {
 		this.rest = new ListMap<>();
 		for(Entry<String, ParamFormal> entry : params.listMap.entrySet()) {
 			ParamFormal val = entry.getValue();
-			ParamFormal pf = new ParamFormal(val.id, val.type, val.defval, val.val, val.attributes, val.defined);
+			ParamFormal pf = new ParamFormal(val.id, val.type, val.defval, val.val, val.where, val.attributes, val.defined);
 			this.listMap.put(entry.getKey(), pf);
 		}
 	}
@@ -87,19 +95,32 @@ public class Params {
 		p.val = value;
 	}
 
+	public List<Type> types() {
+		List<Type> list = new ArrayList<>();
+		for(ParamFormal pf : listMap.values()) {
+			list.add(pf.type);
+		}
+		return list;
+	}
+
 	/* Map actual arguments to formal arguments */
-	/* CURRY */
-	public Params call(ListMap<Object> args) {
+	public Params call(Interpreter interpreter, Callee callee, Expr.Map args) {
 
 		curry = false;
 		rest.clear();
 		
-		for (Entry<String, Object> arg : args.entrySet()) {
+		if(args == null) {
+			return this;
+		}
+		
+		for (Expr arg : args.mappings) {
 
 			/* map actual to formal parameter by index or by keyword */
 			ParamFormal formal = null;
-			
-			if(isGensym(arg.getKey())) {
+
+			String key = null;
+			if (!(arg instanceof Expr.Mapping)) {
+				key = ListMap.gensym.nextSymbol();
 				for (ParamFormal f : listMap.values()) {
 					if (!f.isDefined()) {
 						formal = f;
@@ -107,33 +128,39 @@ public class Params {
 					}
 				}
 			} else {
-				formal = listMap.get(arg.getKey());
+				Expr.Mapping entry = (Expr.Mapping) arg;
+				key = entry.key;
+				formal = listMap.get(key);
 			}
 			
 			/* if not found and if varargs allowed, create new parameter */
 			if (formal == null && vararg) {
-				String key = arg.getKey();
 				formal = new ParamFormal(
 						key,   		// the key or Gensym
 						Type.Any,  	// the type 
 						null,  		// default value
+						null,       // where
 						new Attributes()
 				);
 				// add the new param
 				listMap.put(key, formal);
-				rest.put(key, arg.getValue());
+				rest.put(key, interpreter.evaluate(arg).value);
 			} else if(formal == null)  {
 				throw new InterpreterError("This call does not allow varargs");
 			}
 			
 			/* set parameter value */
-			setVal(formal, arg.getValue());
+			if(formal.attributes.isThunk()) {
+				setVal(callee, interpreter, formal, arg);
+			} else {
+				setVal(callee, interpreter, formal, interpreter.evaluate(arg).value);
+			}
 		}
 		
 		for (ParamFormal formal : listMap.values()) {
 			if (!formal.isDefined()) {
 				if(formal.getDefval() != null) {
-					setVal(formal, formal.getDefval());
+					setVal(callee, interpreter, formal, formal.getDefval());
 				} else {
 					curry = true;
 				}
@@ -142,14 +169,20 @@ public class Params {
 		return this;
 	}
 
-	private boolean isGensym(String key) {
-		return key.startsWith(ListMap.gensym.prefix);
-	}
-
-	void setVal(ParamFormal formal, Object value) {
+	@SuppressWarnings("unchecked")
+	void setVal(Callee callee, Interpreter interpreter, ParamFormal formal, Object value) {
 		if (!formal.isDefined()) {
-			if (value != null) {
+			if(value == null) {
+				if(formal.type != Type.Void && (formal.type instanceof Type.UnionType && 
+						!((Type.UnionType)formal.type).types.contains(Type.Void))) {
+					throw new InterpreterError(formal.getId() + " is not nullable!");
+				}
+			} else if(value instanceof Expr) {
+				formal.val = value;
+				formal.defined = true;				
+			} else {
 				/* check type */
+				formal.type = Type.evaluate(formal.type, callee.closure);
 				if (formal.getType().matches(Interpreter.typeFromValue(value))) {
 					//System.out.println("Assigned " + value + " to " + formal.getId());
 					formal.val = value;
@@ -157,11 +190,28 @@ public class Params {
 				} else {
 					throw new InterpreterError(value + " is not an instance of " + formal.getType());
 				}
-			} else {
-				throw new InterpreterError(formal.getId() + " is not nullable!");
 			}
 		} else {
 			throw new InterpreterError(formal.getId() + " has already been instantiated");
+		}
+		
+		// add the actual parameter to the environment
+		ListMap<String> where = new ListMap<>();
+		if(formal.attributes.isMixin()) {
+			if (formal.where != null) {
+				where = (ListMap<String>) interpreter.evaluate(formal.where).value;
+			}
+			callee.mixins.add(new Mixin((Callee)formal.val, where));
+		}
+		if(formal.attributes.isProp()) {
+			callee.parent.closure.define(
+					formal.id, 
+					new Result(
+							new Property(mutable, formal.id, new Result(formal.val, formal.type)), 
+							formal.type),
+					mutable, true);
+		} else {
+			callee.closure.define(formal.id, new Result(formal.val, formal.type), mutable, false);			
 		}
 	}
 
@@ -176,6 +226,15 @@ public class Params {
 		}
 		sb.append("}");
 		return sb.toString();
+	}
+
+	public ListMap<Object> toMap() {
+		ListMap<Object> ret = new ListMap<>();
+		for(int i=0; i < listMap.size(); i++) {
+			ParamFormal value = listMap.get(i);
+			ret.put(value.id, value.val);
+		}
+		return ret;
 	}
 
 	public void clear() {

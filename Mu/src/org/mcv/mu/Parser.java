@@ -8,36 +8,34 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.mcv.math.BigInteger;
 import org.mcv.mu.Expr.Block;
-import org.mcv.mu.Expr.Dot;
 import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Params.ParamFormal;
 import org.mcv.mu.Scanner.ScannerError;
 
 class Parser {
 
-	private static final String VAL_MUST_HAVE_INITIALIZER = "val must have initializer: %s";
-	private static final String BAD_TYPE = "Bad type %s";
-	//private static final String INVALID_TEMPLATE_DECLARATION = "Invalid template declaration";
-	private static final String CLASS_NAME_SHOULD_START_WITH_CAPITAL_LETTER = "Class name should start with capital letter";
+	static final String VAL_MUST_HAVE_INITIALIZER = "val must have initializer: %s";
+	static final String BAD_TYPE = "Bad type %s";
+	static final String CLASS_NAME_SHOULD_START_WITH_CAPITAL_LETTER = "Class name should start with capital letter";
 
-	private static final String EXPECT_EXPRESSION = "Expect expression.";
-	private static final String EXPECT_VARIABLE_NAME = "Expect variable name.";
-	private static final String EXPECT_COMMA = "Expect ,";
-	private static final String EXPECT_COLON = "Expect colon";
-	private static final String EXPECT_RPAREN = "Expect )";
-	private static final String EXPECT_LPAREN = "Expect (";
-	private static final String EXPECT_TYPE = "Expect type";
-	private static final String EXPECT_TYPE_NAME = "Expect type name.";
-	private static final String EXPECT_NAME = "Expect name.";
-	private static final Gensym lambdaGen = new Gensym("LAMBDA_");
+	static final String EXPECT_EXPRESSION = "Expect expression.";
+	static final String EXPECT_VARIABLE_NAME = "Expect variable name.";
+	static final String EXPECT_COMMA = "Expect ,";
+	static final String EXPECT_COLON = "Expect colon";
+	static final String EXPECT_RPAREN = "Expect )";
+	static final String EXPECT_LPAREN = "Expect (";
+	static final String EXPECT_TYPE = "Expect type";
+	static final String EXPECT_TYPE_NAME = "Expect type name.";
+	static final String EXPECT_NAME = "Expect name.";
+	static final Gensym lambdaGen = new Gensym("LAMBDA_");
 	
-	private final List<Token> tokens;
-	@SuppressWarnings("unused")
-	private Environment main;
-	private int current = 0;
-	private int looplevel = 0;
-
+	final List<Token> tokens;
+	Mu handler;
+	int current = 0;
+	int looplevel = 0;
+	
 	static class ParserError extends ScannerError {
 		private static final long serialVersionUID = 1L;
 		protected transient Token tok;
@@ -54,12 +52,13 @@ class Parser {
 			super(e);
 		}
 	}
-
-	Parser(List<Token> tokens, Environment main) {
+	
+	Parser(List<Token> tokens, Environment main, Mu mu) {
 		this.tokens = tokens;
-		this.main = main;
+		//this.main = main;
+		this.handler = mu;
 	}
-
+	
 	List<Expr> parse() {
 		List<Expr> statements = new ArrayList<>();
 		while (!isAtEnd()) {
@@ -75,9 +74,9 @@ class Parser {
 				} else {
 					pe = new ParserError(e);
 				}
-				pe.tok = tokens.get(current);
+				pe.tok = tokens.get(current-1);
 				pe.line = pe.tok.line;
-				Mu.error(pe);
+				handler.error(pe);
 				if (pe.tok.type.equals(EOF)) {
 					break;
 				}
@@ -88,13 +87,14 @@ class Parser {
 	}
 
 	/* DECLARATIONS */
-	private Expr declaration() {
+	Expr declaration() {
 		Attributes attributes = new Attributes();
 		while (isAttribute()) {
 			attribute(attributes);
+			if(match(SEMICOLON));
 		}
-		if (match(MODULE)) {
-			return moduleDeclaration(attributes);
+		if (match(IMPORT)) {
+			return importDeclaration(attributes);
 		} else if (match(TYPE)) {
 			return typeDeclaration(attributes);
 		} else if (match(CLASS)) {
@@ -102,7 +102,7 @@ class Parser {
 		} else if (match(FUN)) {
 			return templateDeclaration(FUN.name().toLowerCase(), attributes, false);
 		} else if (match(VAR)) {
-			return varDeclaration(attributes);
+			return varDeclaration(false, attributes);
 		} else if (match(VAL)) {
 			return valDeclaration(attributes);
 		} else {
@@ -127,6 +127,7 @@ class Parser {
 				if(match(RIGHT_PAREN)) {
 					if(lit.type.equals(STRING)) {
 						attributes.put("doc", lit.literal);
+						return;
 					}
 				}
 			}
@@ -143,7 +144,7 @@ class Parser {
 		// class ( params )
 
 		Token name = new Token(kind.equalsIgnoreCase("fun") ? ID : TID, 
-				ListMap.gensym.nextSymbol(), "", tokens.get(current).line);
+				ListMap.gensym.nextSymbol(), "", tokens.get(current-1).line);
 
 		Params params = null;
 		Type returnType = null;
@@ -155,7 +156,7 @@ class Parser {
 					name = consume(ID, EXPECT_NAME);
 				} else {
 					// anonymous lambda
-					name = new Token(ID, lambdaGen.nextSymbol(), "", tokens.get(current).line);
+					name = new Token(ID, lambdaGen.nextSymbol(), "", tokens.get(current-1).line);
 				}
 			} else if (kind.equalsIgnoreCase(CLASS.name())) {
 				if (check(TID)) {
@@ -164,7 +165,7 @@ class Parser {
 					throw new ParserError(CLASS_NAME_SHOULD_START_WITH_CAPITAL_LETTER);
 				} else {
 					// anonymous class
-					name = new Token(ID, ListMap.gensym.nextSymbol(), "", tokens.get(current).line);
+					name = new Token(ID, ListMap.gensym.nextSymbol(), "", tokens.get(current-1).line);
 				}
 			}
 		}
@@ -177,7 +178,7 @@ class Parser {
 		}
 
 		if (match(ARROW)) {
-			returnType = typeLiteral();
+			returnType = typeLiteral(null);
 		}
 
 		if(!isTypedef) {
@@ -188,21 +189,33 @@ class Parser {
 				throw new ParserError("Must supply a %s body", kind.toLowerCase());
 			}
 		}
-		
+				
+		TemplateDef def = null;
 		if (kind.equalsIgnoreCase(CLASS.name())) {
-			return new Expr.TemplateDef(name, kind, params, Type.Any, body, attributes);
+			def = new Expr.TemplateDef(name, kind, params, Type.Any, body, attributes);
 		} else if (kind.equalsIgnoreCase(FUN.name())) {
 			// check if return type not null
 			if (returnType == null) {
 				returnType = Type.Void;
 			}
-			return new Expr.TemplateDef(name, kind, params, returnType, body, attributes);
+			def = new Expr.TemplateDef(name, kind, params, returnType, body, attributes);
+		} else {
+			throw new ParserError("Error parsing template definition");			
 		}
-		return null;
+
+		// immediate call: check for LPAREN_CALL
+		if(match(LPAREN_CALL)) {
+			return maybeCall(def, false);
+		}
+		if(match(SAFECALL)) {
+			return maybeCall(def, true);
+		}
+
+		return def;
 	}
 
 	private Params params() {
-		// ( =>type name [: defval], ..., [*])
+		// ( =>type name [: defval][where], ..., [*])
 		Params params = new Params();
 		do {
 			/* empty parameter list!! */
@@ -223,7 +236,7 @@ class Parser {
 				attribute(attributes);
 			}
 
-			Type type = typeLiteral();
+			Type type = typeLiteral(null);
 			if (type == null) {
 				throw new ParserError(EXPECT_TYPE);
 			}
@@ -233,58 +246,97 @@ class Parser {
 				name = consume(ID, EXPECT_NAME);
 			} else if (type.name.equals("Type") && check(TID)) {
 				typeParam = true;
-				name = consume(ID, EXPECT_TYPE_NAME);
+				name = consume(TID, EXPECT_TYPE_NAME);
 			} else {
-				//throw new ParserError(EXPECT_NAME);
-				// anonymous lambda 
-				name = new Token(ID, ListMap.gensym.nextSymbol(), null, tokens.get(current).line);
+				// anonymous param 
+				name = new Token(ID, ListMap.gensym.nextSymbol(), null, tokens.get(current-1).line);
 			}
 
 			Expr defval = null;
 			if (match(COLON)) {
 				// type
 				if (typeParam) {
-					defval = new Expr.TypeLiteral(null, typeLiteral(), new Attributes());
+					defval = new Expr.TypeLiteral(null, typeLiteral(null), new Attributes());
 				} else {
 					defval = expression();
 				}
 			}
-			ParamFormal formal = new ParamFormal(name.lexeme, type, defval, attributes);
+			
+			Expr.Map where = null;
+			if(match(WHERE)) {
+				consume(LEFT_PAREN, EXPECT_LPAREN);
+				List<Expr> exprs = new ArrayList<>();
+				while (!match(RIGHT_PAREN)) {
+					Expr expr = declaration();
+					if (expr == null)
+						continue;
+					exprs.add(expr);
+					match(COMMA);
+					match(SEMICOLON);
+				}
+				where = new Expr.Map(name, exprs);
+			}
+			ParamFormal formal = new ParamFormal(name.lexeme, type, defval, where, attributes);
 			params.add(formal);
 		} while (match(COMMA));
 		consume(RIGHT_PAREN, EXPECT_RPAREN);
 		return params;
 	}
 
-	private Expr moduleDeclaration(Attributes attributes) {
-		Expr.Dot qname = (Dot) selector();
-		return new Expr.Module(((Expr.Variable) qname.next).name, attributes);
+	private Expr importDeclaration(Attributes attributes) {
+		// import "<file-path>" [from "<git-repo[:commit]>"] [as "qname"/QID] [where (map)]
+		Token name = previous();
+		String filename = (String) consume(STRING, "Expected import name").literal;
+		String gitrepo = null;
+		String qid = null;
+		Expr.Map where = null;
+
+		if(match(FROM)) {
+			gitrepo = (String) consume(STRING, "Expected repo name").literal;
+		}
+		if(match(AS)) {
+			qid = (String) consume(STRING, "Expected qualified name").literal;
+		}
+		if(match(WHERE)) {
+			consume(LEFT_PAREN, EXPECT_LPAREN);
+			List<Expr> exprs = new ArrayList<>();
+			while (!match(RIGHT_PAREN)) {
+				Expr expr = declaration();
+				if (expr == null)
+					continue;
+				exprs.add(expr);
+				match(COMMA);
+				match(SEMICOLON);
+			}
+			where = new Expr.Map(name, exprs);
+		}
+		return new Expr.Import (name, gitrepo, filename, qid, where, attributes);
 	}
 
 	private Expr typeDeclaration(Attributes attributes) {
 		Token name = consume(TID, EXPECT_TYPE_NAME);
 		consume(COLON, EXPECT_COLON);
-		return new Expr.TypeDef(name, typeLiteral(), attributes);
+		return new Expr.TypeDef(name, typeLiteral(name.lexeme), attributes);
 	}
 
-	private Type typeLiteral() {
+	private Type typeLiteral(String name) {
 
-		Type left = type();
+		Type left = type(name);
 
 		/* union */
 		if (match(OR)) {
-			return new Type.UnionType(left, typeLiteral());
+			return new Type.UnionType(left, typeLiteral(name));
 		}
 
 		/* intersection */
 		if (match(AND)) {
-			return new Type.IntersectionType(left, typeLiteral());
+			return new Type.IntersectionType(left, typeLiteral(name));
 		}
 
 		return left;
 	}
 
-	private Type type() {
+	private Type type(String name) {
 		/* signature */
 		if (match(FUN, CLASS)) {
 			return signature(previous().lexeme);
@@ -292,40 +344,40 @@ class Parser {
 
 		if (match(TID)) {
 			/* simple type name or alias */
-			return new Type(previous().lexeme);
+			return new Type(previous().lexeme, true);
 		}
 
 		if (match(ENUM)) {
+			if(name == null) {
+				throw new ParserError("Enum types can only be defined in typedefs");
+			}
 			if (match(LEFT_BRACE)) {
-				String name = tokens.get(current - 3).lexeme;
-				return new Type.SetEnum(name, new HashSet<String>(eval(set())));
+				return new Type.SetEnum(name, new HashSet<Object>(eval(set())));
 			} else {
 				boolean hasBrk = false;
 				if (match(LEFT_BRK))
 					hasBrk = true;
-				String name = tokens.get(current - 3).lexeme;
 				return new Type.ListEnum(name, eval(list(hasBrk)));
 			}
-
 		}
 
 		if (match(LIST)) {
 			consume(LPAREN_CALL, EXPECT_LPAREN);
-			Type type = typeLiteral();
+			Type type = typeLiteral(name);
 			consume(RIGHT_PAREN, EXPECT_RPAREN);
 			return new Type.ListType(type);
 		}
 
 		if (match(SET)) {
 			consume(LPAREN_CALL, EXPECT_LPAREN);
-			Type type = typeLiteral();
+			Type type = typeLiteral(name);
 			consume(RIGHT_PAREN, EXPECT_RPAREN);
 			return new Type.SetType(type);
 		}
 
 		if (match(REF)) {
 			consume(LPAREN_CALL, EXPECT_LPAREN);
-			Type type = typeLiteral();
+			Type type = typeLiteral(name);
 			consume(RIGHT_PAREN, EXPECT_RPAREN);
 			return new Type.RefType(type);
 		}
@@ -333,14 +385,12 @@ class Parser {
 		/* map K->V */
 		if (match(MAP)) {
 			consume(LPAREN_CALL, EXPECT_LPAREN);
-			Type key = typeLiteral();
-			consume(COMMA, EXPECT_COMMA);
-			Type val = typeLiteral();
+			Type val = typeLiteral(name);
 			consume(RIGHT_PAREN, EXPECT_RPAREN);
-			return new Type.MapType(key, val);
+			return new Type.MapType(val);
 		}
 
-		return null;
+		throw new ParserError("Error parsing type");
 	}
 
 	private Type signature(String kind) {
@@ -349,20 +399,42 @@ class Parser {
 		return new Type.SignatureType(def);
 	}
 
-	private List<String> eval(Expr se) {
-		List<String> ret = new ArrayList<>();
+	private List<Object> eval(Expr se) {
+		List<Object> ret = new ArrayList<>();
 		if (se instanceof Expr.Set) {
 			Expr.Set set = (Expr.Set) se;
 			for (Expr expr : set.exprs) {
 				if (expr instanceof Expr.Variable) {
-					ret.add(((Expr.Variable) expr).name.lexeme);
+					ret.add(new Symbol(((Expr.Variable) expr).name.lexeme));
 				}
 			}
 		} else if (se instanceof Expr.Seq) {
 			Expr.Seq seq = (Expr.Seq) se;
 			for (Expr expr : seq.exprs) {
 				if (expr instanceof Expr.Variable) {
-					ret.add(((Expr.Variable) expr).name.lexeme);
+					ret.add(new Symbol(((Expr.Variable) expr).name.lexeme));
+				}
+			}
+		} else if (se instanceof Expr.Range) {
+			Expr.Range rng = (Expr.Range) se;
+			if(rng.start instanceof Expr.Literal) {
+				Expr.Literal lit = (Expr.Literal)rng.start;
+				if(lit.value instanceof BigInteger) {
+					BigInteger start = (BigInteger)lit.value;
+					BigInteger end = (BigInteger)((Expr.Literal)rng.end).value;
+					while(start.compareTo(end) <= 0) {
+						ret.add(start);
+						start = start.add(BigInteger.ONE);
+					}
+					return ret;
+				} else if(lit.value instanceof Integer) {
+					int start = (Integer)lit.value;
+					int end = (Integer)((Expr.Literal)rng.end).value;
+					while(start <= end) {
+						ret.add(start);
+						++start;
+					}
+					return ret;					
 				}
 			}
 		} else {
@@ -371,47 +443,280 @@ class Parser {
 		return ret;
 	}
 
-	private Expr varDeclaration(Attributes attributes) {
-		Token name = consume(ID, EXPECT_VARIABLE_NAME);
-
+	Expr varDeclaration(boolean noVar, Attributes attributes) {
+		
+		List<Token> names = new ArrayList<>();
+		do {
+			names.add(consume(ID, EXPECT_VARIABLE_NAME));
+		} while(match(COMMA));
+		
 		Expr initializer = null;
 		if (match(COLON)) {
-			try {
+			int restart = current;
+			try {				
 				initializer = expression();
-				if (initializer.type.name.equals(Type.Type.name))
-					initializer = new Expr.TypeLiteral(name, initializer.type, attributes);
+				if (initializer.type.equals(Type.Type)) {
+					current = restart;
+					throw new ParserError("try again");
+				}
 			} catch (Exception e) {
-				Type type = typeLiteral();
-				initializer = new Expr.TypeLiteral(name, type, attributes);
+				Type type = typeLiteral(null);
+				initializer = new Expr.TypeLiteral(names.get(0), type, attributes);
 			}
 		}
 		if (match(ASSIGN, EQUAL)) {
 			throw new ParserError("Cannot use assignment or = as initializer (use : instead)");
 		}
-		return new Expr.Var(name, initializer, attributes);
+		Expr.Map where = null;
+		if(match(WHERE)) {
+			consume(LEFT_PAREN, EXPECT_LPAREN);
+			List<Expr> exprs = new ArrayList<>();
+			while (!match(RIGHT_PAREN)) {
+				Expr expr = declaration();
+				if (expr == null)
+					continue;
+				exprs.add(expr);
+				match(COMMA);
+				match(SEMICOLON);
+			}
+			where = new Expr.Map(names.get(0), exprs);
+		}
+		if(noVar) {
+			return new Expr.Var(names.get(0), where, attributes);
+		} else {
+			return new Expr.Var(names, initializer, where, attributes);
+		}
 	}
 
 	private Expr valDeclaration(Attributes attributes) {
-		Token name = consume(ID, EXPECT_VARIABLE_NAME);
-
+		
+		List<Token> names = new ArrayList<>();
+		do {
+			names.add(consume(ID, EXPECT_VARIABLE_NAME));
+		} while(match(COMMA));
+				
 		Expr initializer = null;
 		if (match(COLON)) {
 			initializer = expression();
 		}
 
 		if (initializer == null) {
-			throw new ParserError(String.format(VAL_MUST_HAVE_INITIALIZER, name.lexeme));
+			throw new ParserError(String.format(VAL_MUST_HAVE_INITIALIZER, names));
+		}
+		Expr.Map where = null;
+		if(match(WHERE)) {
+			consume(LEFT_PAREN, EXPECT_LPAREN);
+			List<Expr> exprs = new ArrayList<>();
+			while (!match(RIGHT_PAREN)) {
+				Expr expr = declaration();
+				if (expr == null)
+					continue;
+				exprs.add(expr);
+				match(COMMA);
+				match(SEMICOLON);
+			}
+			where = new Expr.Map(names.get(0), exprs);
+		}
+		return new Expr.Val(names, initializer, where, attributes);
+	}
+
+	Expr list() {
+		return list(true);
+	}
+
+	Expr list(boolean expectRB) {
+		List<Expr> exprs = new ArrayList<>();
+		if (match(RIGHT_BRK)) {
+			/* empty list */
+			return new Expr.Seq(previous(), exprs);
+		}
+		do {
+			Expr expr = null;
+			while (match(SEMICOLON)) {
+				/* ignore */}
+			expr = expression();
+			if (expr instanceof Expr.Range) {
+				/* it's a range [] or [) */
+				match(RIGHT_BRK);
+				match(RIGHT_PAREN);
+				return expr;
+			}
+			exprs.add(expr);
+			/* ignore newlines */
+			match(SEMICOLON);
+		} while (match(COMMA));
+		if (expectRB)
+			consume(RIGHT_BRK, "EXPECT ']'");
+		return new Expr.Seq(previous(), exprs);
+	}
+
+	Expr set() {
+		Set<Expr> exprs = new HashSet<>();
+		if (match(RIGHT_BRACE)) {
+			/* empty set */
+			return new Expr.Set(previous(), exprs);
+		}
+		do {
+			Expr expr = null;
+			while (match(SEMICOLON)) {
+				/* ignore */}
+			expr = expression();
+			exprs.add(expr);
+			match(SEMICOLON);
+		} while (match(COMMA));
+		consume(RIGHT_BRACE, "EXPECT '}'");
+		return new Expr.Set(previous(), exprs);
+	}
+
+	Expr block() {
+		Token tok = previous();
+		/* if not consumed yet */
+		match(LEFT_PAREN);
+		boolean isMap = false;
+		List<Expr> exprs = new ArrayList<>();
+		while (!match(RIGHT_PAREN)) {
+			while(match(SEMICOLON)) { /* ignore */ }
+			Expr decl = declaration();
+			if(decl == null) continue;
+			exprs.add(decl);
+			if (exprs.size() == 1) {
+				Expr.Range rng = getRange(exprs);
+				if (rng != null) {
+					/* it's a range [] or [) */
+					match(RIGHT_BRK);
+					match(RIGHT_PAREN);
+					return rng;
+				}
+			}
+			if (match(SEMICOLON)) {
+				// it's a block
+			}
+			if (match(COMMA)) {
+				// it's a map/tuple/call
+				isMap = true;
+			}
+		}
+		match(SEMICOLON);
+		if (isMap) {
+			return new Expr.Map(tok, exprs);
+		}
+		return new Expr.Block(tok, exprs);
+	}
+
+	Expr maybeCall(Expr last, boolean safe) {
+		Token tok = previous();
+		if (!callable())
+			return last;
+		List<Expr> exprs = new ArrayList<>();
+		while (!match(RIGHT_PAREN)) {
+			Expr expr = declaration();
+			if (expr == null)
+				continue;
+			exprs.add(expr);
+			match(COMMA);
+			match(SEMICOLON);
+		}
+		return new Expr.Call(last, new Expr.Map(tok, exprs), safe);
+	}
+
+	private boolean callable() {
+		for (int i = current; i < tokens.size(); i++) {
+			Token tok = tokens.get(i);
+			if (tok.type.equals(RIGHT_PAREN)) {
+				return true;
+			}
+			// if bracketed, ignore
+			if (isOpenBracket(tok)) {
+				for (; i < tokens.size(); i++) {
+					if (!isCloseBracket(tokens.get(i))) {
+						break;
+					}
+				}
+			}
+			// if newline not after comma => block
+			if (tok.type.equals(SEMICOLON)) {
+				if (!tokens.get(i - 1).type.equals(COMMA)) {
+					return false;
+				}
+			}
+			// if ARROW => map
+			if (tok.type.equals(ARROW)) {
+				return false;
+			}
+			// if DOTDOT => range
+			if (tok.type.equals(DOTDOT)) {
+				return false;
+			}
+		}
+		return false;
+	}
+
+	private boolean isOpenBracket(Token tok) {
+		return tok.type.equals(LEFT_BRACE) || tok.type.equals(LEFT_BRK) || tok.type.equals(LEFT_PAREN);
+	}
+
+	private boolean isCloseBracket(Token tok) {
+		return tok.type.equals(RIGHT_BRACE) || tok.type.equals(RIGHT_BRK) || tok.type.equals(RIGHT_PAREN);
+	}
+
+	Expr maybeSubscript(Expr last, boolean safe) {
+		if (!indexable())
+			return last;
+		List<Expr> exprs = new ArrayList<>();
+		Expr expr = null;
+		while ((expr = expression()) == null) {
+			/* ignore */ 
 		}
 
-		return new Expr.Val(name, initializer, attributes);
+		if (expr instanceof Expr.Range) {
+			/* it's a range [] or [) */
+			match(RIGHT_BRK);
+			match(RIGHT_PAREN);
+			return new Expr.Subscript(last, expr, safe);
+		}
+		exprs.add(expr);
+		/* ignore newlines */
+		match(SEMICOLON);
+		consume(RIGHT_BRK, "EXPECT ']'");
+		return new Expr.Subscript(last, new Expr.Seq(previous(), exprs), safe);
+	}
+
+	private boolean indexable() {
+		for (int i = current; i < tokens.size(); i++) {
+			Token tok = tokens.get(i);
+			if (tok.type.equals(RIGHT_BRK)) {
+				return true;
+			}
+			if (tok.type.equals(COMMA)) {
+				return false;
+			}
+			// if bracketed, ignore
+			if (isOpenBracket(tok)) {
+				for (; i < tokens.size(); i++) {
+					if (!isCloseBracket(tokens.get(i))) {
+						break;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private Expr.Range getRange(List<Expr> exprs) {
+		if (exprs.get(0) instanceof Expr.Range) {
+			return (Expr.Range) exprs.get(0);
+		}
+		return null;
 	}
 
 	/* STATEMENTS */
-	private Expr statement() {
+	Expr statement() {
 		if (match(PRINT))
 			return printStatement(previous());
-		if (match(TYPEOF))
-			return printTypeStatement(previous());
+		if (match(ASSERT))
+			return assertStatement(previous());
+		if (match(THROW))
+			return throwStatement(previous());
 		if (match(RETURN))
 			return returnStatement(previous());
 		if (match(BREAK))
@@ -420,6 +725,8 @@ class Parser {
 			return continueStatement(previous());
 		if (match(AROUND, BEFORE, AFTER, ERROR, ALWAYS))
 			return aopStatement(previous());
+		if(match(GET, SET))
+			return getSetStatement(previous());
 		return expression();
 	}
 
@@ -428,9 +735,9 @@ class Parser {
 		return new Expr.Print(name, value);
 	}
 
-	private Expr printTypeStatement(Token name) {
-		Expr value = declaration();
-		return new Expr.PrintType(name, value);
+	private Expr throwStatement(Token name) {
+		Expr value = expression();
+		return new Expr.Throw(name, value);
 	}
 
 	private Expr returnStatement(Token token) {
@@ -440,14 +747,14 @@ class Parser {
 
 	private Expr breakStatement(Token name) {
 		if (looplevel <= 0)
-			throw new ParserError("Break statement must be inside a loop.");
+			throw new ParserError("Break statement must be inside a loop");
 		match(SEMICOLON);
 		return new Expr.Break(name);
 	}
 
 	private Expr continueStatement(Token name) {
 		if (looplevel <= 0)
-			throw new ParserError("Continue statement must be inside a loop.");
+			throw new ParserError("Continue statement must be inside a loop");
 		match(SEMICOLON);
 		return new Expr.Continue(name);
 	}
@@ -455,17 +762,28 @@ class Parser {
 	/* AOP */
 	private Expr aopStatement(Token tok) {
 		/* before <callable> : <block> */
-		if (!callable()) {
-			throw new ParserError("Argument to AOP statement must be callable");
-		}
-		Expr expr = expression();
-		consume(COLON, EXPECT_COLON);
+		Expr expr = assignment();
+		consume(COLON, Parser.EXPECT_COLON);
 		Block block = (Block)block();
-		return new Expr.Aop(tok, expr, block);
+		return new Expr.Aop(tok, expr, block);		
+	}
+
+	/* Define getter/setter */
+	private Expr getSetStatement(Token tok) {
+		/* before <callable> : <block> */
+		List<Token> ids = new ArrayList<>();
+		do {
+			ids.add(consume(ID, EXPECT_NAME));
+		} while(match(COMMA));
+		consume(COLON, Parser.EXPECT_COLON);
+		Block block = (Block)block();
+		if(tok.type.equals(GET))
+			return new Expr.Getter(tok, ids, block);
+		return new Expr.Setter(tok, ids, block);
 	}
 
 	/* EXPRESSIONS */
-	private Expr expression() {
+	Expr expression() {
 		return range();
 	}
 
@@ -492,7 +810,14 @@ class Parser {
 		Expr expr = assignment();
 		if (match(ARROW)) {
 			Expr val = assignment();
-			return new Expr.Mapping(name, ((Expr.Variable) expr).name.lexeme, val, true);
+			String key = expr.toString();
+			if(expr instanceof Expr.Variable) {
+				key = ((Expr.Variable) expr).name.lexeme;
+			}
+			if(expr instanceof Expr.Literal) {
+				key = String.valueOf(((Expr.Literal)expr).value);
+			}
+			return new Expr.Mapping(name, key, val, true);
 		}
 		if (match(COLON)) {
 			Expr val = assignment();
@@ -519,6 +844,21 @@ class Parser {
 				Expr.Subscript sub = (Expr.Subscript) expr;
 				sub.value = value;
 				return sub;
+			} else if (expr instanceof Expr.Map) {
+				/* destructuring assignment */
+				Expr.Map map = (Expr.Map)expr;
+				List<Token> list = new ArrayList<>();
+				for(Expr exp : map.mappings) {
+					if(exp instanceof Expr.Variable) {
+						list.add(((Expr.Variable)exp).name);
+					}
+					if(exp instanceof Expr.Mapping) {
+						String key = ((Expr.Mapping)exp).key;
+						Token synth = new Token(ID, key, key, exp.line);
+						list.add(synth);
+					}
+				}
+				return new Expr.Assign(list, value, op);
 			}
 			throw new ParserError("Invalid assignment target.");
 		}
@@ -544,50 +884,79 @@ class Parser {
 	}
 
 	private Expr forExpression(Token name) {
-		// for var i in range block
-		Expr.Var var = null;
-		if (match(VAR)) {
-			// optional
+		try {
+			boolean noVar = true;
+			
+			++looplevel;
+			// for var i in range block
+			Expr.Var var = null;
+			if (match(VAR)) {
+				noVar = false;
+			}
+			var = (Expr.Var) varDeclaration(noVar, new Attributes());
+			consume(IN, "EXPECT IN");
+			// range or list or set or map
+			Expr range = null;
+	
+			if (match(ID)) {
+				range = new Expr.Variable(previous());
+			} else if (check(LEFT_PAREN)) {
+				range = range();
+			} else if (check(LEFT_BRACE)) {
+				range = set();
+			} else if (check(LEFT_BRK)) {
+				range = list();
+			}
+			Expr.Block block = (Expr.Block) block();
+			Expr.Block atEnd = null;
+			if (match(AFTER)) {
+				atEnd = (Block) block();
+			}
+			return new Expr.For(name, var, range, block, atEnd);
+		} finally {
+			--looplevel;
 		}
-		var = (Expr.Var) varDeclaration(new Attributes());
-		consume(IN, "EXPECT IN");
-		// range or list or set or map
-		Expr range = null;
+	}
 
-		if (match(ID)) {
-			range = new Expr.Variable(previous());
-		} else if (check(LEFT_PAREN)) {
-			range = range();
-		} else if (check(LEFT_BRACE)) {
-			range = set();
-		} else if (check(LEFT_BRK)) {
-			range = list();
+	/* truthiness */
+	private Expr assertStatement(Token name) {
+		Expr.Set criteria = null;
+		if(match(LEFT_BRACE)) {
+			criteria = (Expr.Set)set();
 		}
-		Expr.Block block = (Expr.Block) block();
-		Expr.Block atEnd = null;
-		if (match(AFTER)) {
-			atEnd = (Block) block();
+		Expr value = expression();
+		String msg = "Assertion error";
+		if(peek().type.equals(STRING)) {
+			msg = (String) consume(STRING, "Expected message").literal;
 		}
-		return new Expr.For(name, var, range, block, atEnd);
+		return new Expr.Assert(name, value, msg, criteria);
 	}
 
 	private Expr ifExpression(Token name) {
+		Expr.Set criteria = null;
+		if(match(LEFT_BRACE)) {
+			criteria = (Expr.Set)set();
+		}
 		Expr condition = expression();
 		Expr thenBranch = block();
 		Expr elseBranch = null;
 		if (match(ELSE)) {
 			elseBranch = block();
 		}
-		return new Expr.If(name, condition, thenBranch, elseBranch);
+		return new Expr.If(name, condition, thenBranch, elseBranch, criteria);
 	}
 
 	private Expr doWhileExpression(Token name) {
 		try {
 			looplevel++;
 			Expr.Block body = (Block) block();
-			consume(WHILE, "Expect 'while' in a do-while loop.");
+			consume(WHILE, "Expect 'while' in a do-while loop");
 			Expr condition = expression();
-			body.expressions.add(new Expr.While(name, condition, body, null));
+			Expr.Set criteria = null;
+			if(match(LEFT_BRACE)) {
+				criteria = (Expr.Set)set();
+			}
+			body.expressions.add(new Expr.While(name, condition, body, null, criteria));
 			return new Expr.Block(name, body.expressions);
 		} catch(Exception e) {
 			throw new ParserError("Unexpected error");
@@ -597,6 +966,10 @@ class Parser {
 	}
 
 	private Expr whileExpression(Token name) {
+		Expr.Set criteria = null;
+		if(match(LEFT_BRACE)) {
+			criteria = (Expr.Set)set();
+		}
 		Expr condition = expression();
 		try {
 			looplevel++;
@@ -605,9 +978,9 @@ class Parser {
 			if (match(AFTER)) {
 				atEnd = block();
 			}
-			return new Expr.While(name, condition, body, atEnd);
+			return new Expr.While(name, condition, body, atEnd, criteria);
 		} catch(Exception e) {
-			throw new ParserError("Unexpected error");
+			throw new ParserError("Unexpected error %", e);
 		} finally {
 			looplevel--;
 		}
@@ -615,7 +988,7 @@ class Parser {
 
 	private Expr selectExpression(Token name) {
 		Expr condition = expression();
-		consume(LEFT_PAREN, EXPECT_LPAREN);
+		consume(LEFT_PAREN, Parser.EXPECT_LPAREN);
 
 		List<Expr> whenExpressions = new ArrayList<>();
 		List<Expr> whenBranches = new ArrayList<>();
@@ -631,7 +1004,7 @@ class Parser {
 			elseBranch = block();
 			match(SEMICOLON);
 		}
-		consume(RIGHT_PAREN, EXPECT_RPAREN);
+		consume(RIGHT_PAREN, Parser.EXPECT_RPAREN);
 		return new Expr.Select(name, condition, whenExpressions, whenBranches, elseBranch);
 	}
 
@@ -646,32 +1019,21 @@ class Parser {
 	}
 
 	private Expr and() {
-		Expr expr = equality();
+		Expr expr = eqcomp();
 		while (match(AND)) {
 			Token operator = previous();
-			Expr right = equality();
+			Expr right = eqcomp();
 			expr = new Expr.Binary(expr, operator, right);
 		}
 		return expr;
 	}
 
-	private Expr equality() {
-		Expr expr = comparison();
-
-		while (match(NOT_EQUAL, EQUAL, EQEQ, NEQEQ)) {
-			Token operator = previous();
-			Expr right = comparison();
-			expr = new Expr.Binary(expr, operator, right);
-		}
-		return expr;
-	}
-
-	private Expr comparison() {
+	private Expr eqcomp() {
 		Expr expr = shift();
 
-		while (match(GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)) {
+		while (match(NOT_EQUAL, EQUAL, EQEQ, NEQEQ, GREATER, GREATER_EQUAL, LESS, LESS_EQUAL)) {
 			Token operator = previous();
-			Expr right = term();
+			Expr right = eqcomp();
 			expr = new Expr.Binary(expr, operator, right);
 		}
 		return expr;
@@ -743,7 +1105,7 @@ class Parser {
 	}
 
 	private Expr prefix() {
-		if (match(PLUSPLUS, MINMIN)) {
+		if (match(PLUSPLUS, MINMIN, ATSIGN, UPARROW)) {
 			Token operator = previous();
 			Expr right = primary();
 			return new Expr.Unary(operator, right);
@@ -768,44 +1130,55 @@ class Parser {
 			Expr right = selector();
 			return new Expr.Unary(operator, right);
 		}
-		Expr expr = selector();
-		if (match(GCD, MAX, MIN)) {
-			Token operator = previous();
-			Expr right = selector();
-			return new Expr.Binary(expr, operator, right);
-		}
-		return expr;
+		return selector();
 	}
 
 	private Expr selector() {
 		/* aggregate literals here */
 
 		Expr last = primary();
-
-/*		while (match(LEFT_BRK)) {
-			last = maybeSubscript(last);
-		}
-		while (match(LPAREN_CALL)) {
-			last = maybeCall(last);
-		}
-		while (match(DOT)) {
-			Token name = consume(ID, "Expect property name after '.'.");
-			last = new Expr.Dot(last, new Expr.Variable(name));
-		}
-*/
-		while (match(LEFT_BRK, LPAREN_CALL, DOT)) {
+		while (match(LEFT_BRK, LPAREN_CALL, DOT, SAFENAV, SAFESUB, SAFECALL)) {
 			if(previous().type.equals(LEFT_BRK)) {
 				/* LIST or RANGE or SUBSCRIPT */
-				last = maybeSubscript(last);
+				last = maybeSubscript(last, false);
+			}
+			if(previous().type.equals(SAFESUB)) {
+				/* ?[..] */
+				last = maybeSubscript(last, true);
 			}
 			if(previous().type.equals(LPAREN_CALL)) {
 				/* CALL */
-				last = maybeCall(last);
+				last = maybeCall(last, false);
+			}
+			if(previous().type.equals(SAFECALL)) {
+				/* CALL */
+				last = maybeCall(last, true);
 			}
 			if(previous().type.equals(DOT)) {
 				/* DOT */
-				Token name = consume(ID, "Expect property name after '.'.");
-				last = new Expr.Dot(last, new Expr.Variable(name));
+				Token name = null;
+				if(match(ID))
+					name = previous();
+				else if(match(Attribute.DOC))
+					name = previous();
+				else if(match(Keyword.TYPE))
+					name = previous();
+				else if(match(TID))
+					name = previous();
+				else 
+					throw new ParserError("Expected ID after '.'");
+				last = new Expr.Dot(last, new Expr.Variable(name), false);
+			}
+			if(previous().type.equals(SAFENAV)) {
+				/* ?. */
+				Token name = null;
+				if(match(ID))
+					name = previous();
+				else if(match(TID))
+					name = previous();
+				else 
+					throw new ParserError("Expected ID after '.'");
+				last = new Expr.Dot(last, new Expr.Variable(name), true);
 			}
 		}
 
@@ -813,12 +1186,15 @@ class Parser {
 	}
 
 	private Expr primary() {
-		if (match(FALSE))
+		if (match(FALSE)) {
 			return new Expr.Literal(previous(), false);
-		if (match(TRUE))
+		}
+		if (match(TRUE)) {
 			return new Expr.Literal(previous(), true);
-		if (match(NIL))
+		}
+		if (match(NIL)) {
 			return new Expr.Literal(previous(), null);
+		}
 		if (match(INF))
 			return new Expr.Literal(previous(), Double.POSITIVE_INFINITY);
 		if (match(NAN))
@@ -832,10 +1208,10 @@ class Parser {
 		}
 
 		if (match(ID)) {
-			return new Expr.Variable(previous());
+			return new Expr.Variable(previous(), Type.Any);
 		}
 		if (match(TID)) {
-			return new Expr.Variable(previous());
+			return new Expr.Variable(previous(), Type.Type);
 		}
 
 		if (match(EMPTY_SET)) {
@@ -866,196 +1242,9 @@ class Parser {
 		throw new ParserError(EXPECT_EXPRESSION);
 	}
 
-	private Expr list() {
-		return list(true);
-	}
-
-	private Expr list(boolean expectRB) {
-		List<Expr> exprs = new ArrayList<>();
-		if (match(RIGHT_BRK)) {
-			/* empty list */
-			return new Expr.Seq(previous(), exprs);
-		}
-		do {
-			Expr expr = null;
-			while (match(SEMICOLON)) {
-				/* ignore */}
-			expr = expression();
-			if (expr instanceof Expr.Range) {
-				/* it's a range [] or [) */
-				match(RIGHT_BRK);
-				match(RIGHT_PAREN);
-				return expr;
-			}
-			exprs.add(expr);
-			/* ignore newlines */
-			match(SEMICOLON);
-		} while (match(COMMA));
-		if (expectRB)
-			consume(RIGHT_BRK, "EXPECT ']'");
-		return new Expr.Seq(previous(), exprs);
-	}
-
-	private Expr set() {
-		Set<Expr> exprs = new HashSet<>();
-		if (match(RIGHT_BRACE)) {
-			/* empty set */
-			return new Expr.Set(previous(), exprs);
-		}
-		do {
-			Expr expr = null;
-			while (match(SEMICOLON)) {
-				/* ignore */}
-			expr = expression();
-			exprs.add(expr);
-			match(SEMICOLON);
-		} while (match(COMMA));
-		consume(RIGHT_BRACE, "EXPECT '}'");
-		return new Expr.Set(previous(), exprs);
-	}
-
-	private Expr block() {
-		Token tok = previous();
-		/* if not consumed yet */
-		match(LEFT_PAREN);
-		boolean isMap = false;
-		List<Expr> exprs = new ArrayList<>();
-		while (!match(RIGHT_PAREN)) {
-			while(match(SEMICOLON)) { /* ignore */ }
-			Expr decl = declaration();
-			if(decl == null) continue;
-			exprs.add(decl);
-			if (exprs.size() == 1) {
-				Expr.Range rng = getRange(exprs);
-				if (rng != null) {
-					/* it's a range [] or [) */
-					match(RIGHT_BRK);
-					match(RIGHT_PAREN);
-					return rng;
-				}
-			}
-			if (match(SEMICOLON)) {
-				// it's a block
-			}
-			if (match(COMMA)) {
-				// it's a map/tuple/call
-				isMap = true;
-			}
-		}
-		match(SEMICOLON);
-		if (isMap) {
-			return new Expr.Map(tok, exprs);
-		}
-		return new Expr.Block(tok, exprs);
-	}
-
-	private Expr maybeCall(Expr last) {
-		Token tok = previous();
-		if (!callable())
-			return last;
-		List<Expr> exprs = new ArrayList<>();
-		while (!match(RIGHT_PAREN)) {
-			Expr expr = declaration();
-			if (expr == null)
-				continue;
-			exprs.add(expr);
-			match(COMMA);
-			match(SEMICOLON);
-		}
-		return new Expr.Call(last, new Expr.Map(tok, exprs));
-	}
-
-	private boolean callable() {
-		for (int i = current; i < tokens.size(); i++) {
-			Token tok = tokens.get(i);
-			if (tok.type.equals(RIGHT_PAREN)) {
-				return true;
-			}
-			// if bracketed, ignore
-			if (isOpenBracket(tok)) {
-				for (; i < tokens.size(); i++) {
-					if (!isCloseBracket(tokens.get(i))) {
-						break;
-					}
-				}
-			}
-			// if newline not after comma => block
-			if (tok.type.equals(SEMICOLON)) {
-				if (!tokens.get(i - 1).type.equals(COMMA)) {
-					return false;
-				}
-			}
-			// if ARROW => map
-			if (tok.type.equals(ARROW)) {
-				return false;
-			}
-			// if DOTDOT => range
-			if (tok.type.equals(DOTDOT)) {
-				return false;
-			}
-		}
-		return false;
-	}
-
-	private boolean isOpenBracket(Token tok) {
-		return tok.type.equals(LEFT_BRACE) || tok.type.equals(LEFT_BRK) || tok.type.equals(LEFT_PAREN);
-	}
-
-	private boolean isCloseBracket(Token tok) {
-		return tok.type.equals(RIGHT_BRACE) || tok.type.equals(RIGHT_BRK) || tok.type.equals(RIGHT_PAREN);
-	}
-
-	private Expr maybeSubscript(Expr last) {
-		if (!indexable())
-			return last;
-		List<Expr> exprs = new ArrayList<>();
-		Expr expr = null;
-		while ((expr = expression()) == null) {
-			/* ignore */ }
-
-		if (expr instanceof Expr.Range) {
-			/* it's a range [] or [) */
-			match(RIGHT_BRK);
-			match(RIGHT_PAREN);
-			return new Expr.Subscript(last, expr);
-		}
-		exprs.add(expr);
-		/* ignore newlines */
-		match(SEMICOLON);
-		consume(RIGHT_BRK, "EXPECT ']'");
-		return new Expr.Subscript(last, new Expr.Seq(previous(), exprs));
-	}
-
-	private boolean indexable() {
-		for (int i = current; i < tokens.size(); i++) {
-			Token tok = tokens.get(i);
-			if (tok.type.equals(RIGHT_BRK)) {
-				return true;
-			}
-			if (tok.type.equals(COMMA)) {
-				return false;
-			}
-			// if bracketed, ignore
-			if (isOpenBracket(tok)) {
-				for (; i < tokens.size(); i++) {
-					if (!isCloseBracket(tokens.get(i))) {
-						break;
-					}
-				}
-			}
-		}
-		return false;
-	}
-
-	private Expr.Range getRange(List<Expr> exprs) {
-		if (exprs.get(0) instanceof Expr.Range) {
-			return (Expr.Range) exprs.get(0);
-		}
-		return null;
-	}
 
 	/* Parser UTIL */
-	private boolean match(TokenType... types) {
+	boolean match(TokenType... types) {
 		for (TokenType type : types) {
 			if (check(type)) {
 				advance();
@@ -1065,7 +1254,7 @@ class Parser {
 		return false;
 	}
 
-	private boolean matchNext(TokenType... types) {
+	boolean matchNext(TokenType... types) {
 		for (TokenType type : types) {
 			if (checkNext(type)) {
 				advance();
@@ -1075,13 +1264,13 @@ class Parser {
 		return false;
 	}
 
-	private Token consume(TokenType type, String message) {
+	Token consume(TokenType type, String message) {
 		if (check(type))
 			return advance();
 		throw new ParserError(message);
 	}
 
-	private boolean check(TokenType tokenType) {
+	boolean check(TokenType tokenType) {
 		if (isAtEnd())
 			return false;
 		return peek().type == tokenType;
@@ -1095,7 +1284,7 @@ class Parser {
 		return tokens.get(current + 1).type == tokenType;
 	}
 
-	private Token advance() {
+	Token advance() {
 		if (!isAtEnd()) {
 			current++;
 		}
@@ -1106,13 +1295,13 @@ class Parser {
 		return peek().type == EOF;
 	}
 
-	private Token peek() {
+	Token peek() {
 		if (current < tokens.size())
 			return tokens.get(current);
 		return new Token(EOF, "", null, 0);
 	}
 
-	private Token previous() {
+	Token previous() {
 		if (current > 0) {
 			return tokens.get(current - 1);
 		}
