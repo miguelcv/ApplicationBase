@@ -496,6 +496,9 @@ public class Visitors implements Expr.Visitor {
 		case UPARROW:
 			return mu.invoke("deref", new RefType(Type.Any), right);
 
+		case STAR:
+			return mu.evaluate(expr.right);
+
 		default:
 			break;
 		}
@@ -564,12 +567,23 @@ public class Visitors implements Expr.Visitor {
 		Type eltType = Type.Any;
 		for (Expr expr : lst.exprs) {
 			Result r = mu.evaluate(expr);
-			if (eltType.equals(Type.Any)) {
-				eltType = r.type;
-				result.add(r.value);
+			boolean spread = mu.spread(expr);
+			if(spread) {
+				if (eltType.equals(Type.Any)) {
+					eltType = r.type;
+					result.addAll((List<?>)r.value);
+				} else {
+					eltType = Type.unite(eltType, r.type);
+					result.addAll((List<?>)r.value);
+				}				
 			} else {
-				eltType = Type.unite(eltType, r.type);
-				result.add(r.value);
+				if (eltType.equals(Type.Any)) {
+					eltType = r.type;
+					result.add(r.value);
+				} else {
+					eltType = Type.unite(eltType, r.type);
+					result.add(r.value);
+				}
 			}
 		}
 		return new Result(result, new Type.ListType(eltType));
@@ -581,12 +595,23 @@ public class Visitors implements Expr.Visitor {
 		Type eltType = Type.Any;
 		for (Expr expr : set.exprs) {
 			Result r = mu.evaluate(expr);
-			if (eltType.equals(Type.Any)) {
-				eltType = r.type;
-				result.add(r.value);
+			boolean spread = mu.spread(expr);
+			if(spread) {
+				if (eltType.equals(Type.Any)) {
+					eltType = r.type;
+					result.addAll((Set<?>)r.value);
+				} else {
+					eltType = Type.unite(eltType, r.type);
+					result.addAll((Set<?>)r.value);
+				}
 			} else {
-				eltType = Type.unite(eltType, r.type);
-				result.add(r.value);
+				if (eltType.equals(Type.Any)) {
+					eltType = r.type;
+					result.add(r.value);
+				} else {
+					eltType = Type.unite(eltType, r.type);
+					result.add(r.value);
+				}				
 			}
 		}
 		return new Result(result, new Type.SetType(eltType));

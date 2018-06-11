@@ -1135,7 +1135,7 @@ class Parser {
 	}
 
 	private Expr prefix() {
-		if (match(PLUSPLUS, MINMIN, ATSIGN, UPARROW)) {
+		if (match(PLUSPLUS, MINMIN, ATSIGN, UPARROW, STAR)) {
 			Token operator = previous();
 			Expr right = primary();
 			return new Expr.Unary(operator, right);

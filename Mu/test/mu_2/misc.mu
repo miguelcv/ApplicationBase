@@ -1,4 +1,3 @@
-/*
 // doc-comment
 doc("This is a doc comment")
 fun foo() => Int: (
@@ -65,7 +64,6 @@ print true.ord
 print Bool.minval
 print Bool.maxval
 print Bool.values
-*/
 
 type Months: enum[January, February, March, April, May, June, July, August, September, October, November, December]
 print March.ord
@@ -73,11 +71,9 @@ print Months.minval
 print Months.maxval
 print Months.values
 
-/*
 print 'c'.name
 print Bool.interfaces
 print [1,2,3].eltType
 print foo.returnType
 print foo.paramTypes
 print foo.attributes
-*/

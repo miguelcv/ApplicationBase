@@ -1,4 +1,3 @@
-* spread operator
 * imports, using Git!!
 	import "path/to/file[.mu]" from "git-repo[:commit]" [where (map)]
 	config: git-repo-roots

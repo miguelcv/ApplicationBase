@@ -375,8 +375,14 @@ public class Interpreter {
 				listmap.put(entry.key, value.value);
 				valType = Type.unite(valType, value.type);
 			} else {
-				listmap.put(null, value.value);
-				valType = Type.unite(valType, value.type);
+				boolean spread = spread(expr);
+				if(spread) {
+					listmap.putAll((ListMap<?>)value.value);
+					valType = Type.unite(valType, value.type);					
+				} else {
+					listmap.put(null, value.value);
+					valType = Type.unite(valType, value.type);
+				}
 			}
 		}
 		return new Result(listmap, new Type.MapType(valType));
@@ -863,6 +869,14 @@ public class Interpreter {
 		env.define("$new", value, true, false);
 		executeBlockReturn(blk.expressions, env);
 		prop.var.value = env.get("$value").value;
+	}
+
+	public boolean spread(Expr expr) {
+		if(expr instanceof Expr.Unary) {
+			Expr.Unary u = (Expr.Unary)expr;
+			return u.operator.type.equals(Soperator.STAR);
+		}
+		return false;
 	}
 
 }

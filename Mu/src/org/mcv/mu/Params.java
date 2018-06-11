@@ -3,6 +3,7 @@ package org.mcv.mu;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.mcv.mu.Expr.Map;
 import org.mcv.mu.Interpreter.InterpreterError;
@@ -104,6 +105,7 @@ public class Params {
 	}
 
 	/* Map actual arguments to formal arguments */
+	@SuppressWarnings("unchecked")
 	public Params call(Interpreter interpreter, Callee callee, Expr.Map args) {
 
 		curry = false;
@@ -114,46 +116,33 @@ public class Params {
 		}
 		
 		for (Expr arg : args.mappings) {
-
-			/* map actual to formal parameter by index or by keyword */
-			ParamFormal formal = null;
-
-			String key = null;
-			if (!(arg instanceof Expr.Mapping)) {
-				key = ListMap.gensym.nextSymbol();
-				for (ParamFormal f : listMap.values()) {
-					if (!f.isDefined()) {
-						formal = f;
-						break;
+			if (arg instanceof Expr.Unary) {
+				boolean spread = interpreter.spread(arg);
+				if(spread) {
+					Result aggr = interpreter.evaluate(((Expr.Unary) arg).right);
+					Token tok = ((Expr.Unary) arg).operator;
+					if(aggr.value instanceof List) {
+						for(Object next : (List<Object>)aggr.value) {
+							Expr.Literal expr = new Expr.Literal(tok, next);
+							setParam(callee, interpreter, expr);
+						}
+					}
+					if(aggr.value instanceof Set) {
+						for(Object next : (Set<Object>)aggr.value) {
+							Expr.Literal expr = new Expr.Literal(tok, next);
+							setParam(callee, interpreter, expr);
+						}
+					}
+					if(aggr.value instanceof ListMap) {
+						for(Entry<String, Object> next : ((ListMap<Object>)aggr.value).entrySet()) {
+							Expr.Literal val = new Expr.Literal(tok, next.getValue());
+							Expr.Mapping expr = new Expr.Mapping(tok, next.getKey(), val, false);
+							setParam(callee, interpreter, expr);
+						}
 					}
 				}
 			} else {
-				Expr.Mapping entry = (Expr.Mapping) arg;
-				key = entry.key;
-				formal = listMap.get(key);
-			}
-			
-			/* if not found and if varargs allowed, create new parameter */
-			if (formal == null && vararg) {
-				formal = new ParamFormal(
-						key,   		// the key or Gensym
-						Type.Any,  	// the type 
-						null,  		// default value
-						null,       // where
-						new Attributes()
-				);
-				// add the new param
-				listMap.put(key, formal);
-				rest.put(key, interpreter.evaluate(arg).value);
-			} else if(formal == null)  {
-				throw new InterpreterError("This call does not allow varargs");
-			}
-			
-			/* set parameter value */
-			if(formal.attributes.isThunk()) {
-				setVal(callee, interpreter, formal, arg);
-			} else {
-				setVal(callee, interpreter, formal, interpreter.evaluate(arg).value);
+				setParam(callee,interpreter, arg);
 			}
 		}
 		
@@ -169,6 +158,49 @@ public class Params {
 		return this;
 	}
 
+	private void setParam(Callee callee, Interpreter interpreter, Expr arg) {
+		/* map actual to formal parameter by index or by keyword */
+		ParamFormal formal = null;
+
+		String key = null;
+		if (!(arg instanceof Expr.Mapping)) {
+			key = ListMap.gensym.nextSymbol();
+			for (ParamFormal f : listMap.values()) {
+				if (!f.isDefined()) {
+					formal = f;
+					break;
+				}
+			}
+		} else {
+			Expr.Mapping entry = (Expr.Mapping) arg;
+			key = entry.key;
+			formal = listMap.get(key);
+		}
+		
+		/* if not found and if varargs allowed, create new parameter */
+		if (formal == null && vararg) {
+			formal = new ParamFormal(
+					key,   		// the key or Gensym
+					Type.Any,  	// the type 
+					null,  		// default value
+					null,       // where
+					new Attributes()
+			);
+			// add the new param
+			listMap.put(key, formal);
+			rest.put(key, interpreter.evaluate(arg).value);
+		} else if(formal == null)  {
+			throw new InterpreterError("This call does not allow varargs");
+		}
+		
+		/* set parameter value */
+		if(formal.attributes.isThunk()) {
+			setVal(callee, interpreter, formal, arg);
+		} else {
+			setVal(callee, interpreter, formal, interpreter.evaluate(arg).value);
+		}		
+	}
+	
 	@SuppressWarnings("unchecked")
 	void setVal(Callee callee, Interpreter interpreter, ParamFormal formal, Object value) {
 		if (!formal.isDefined()) {

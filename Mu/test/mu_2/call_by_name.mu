@@ -40,13 +40,11 @@ fun f1(): (
 fun f2(): (
 	throw "error!!"
 )
-
 error f2: (
 	print "An error occurred: #{$exception}"
 )
 
 f2()
-
 before f1: (
 	print "BEFORE::"
 )
@@ -95,9 +93,7 @@ var x: X()
 x.bar()
 x.foo()
 
-
 // "pointers"
-
 var i: 100
 var ip: ref(Int)
 //var ip: @i

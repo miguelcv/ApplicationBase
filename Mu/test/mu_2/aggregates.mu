@@ -2,11 +2,8 @@ var s2: set(Int)
 s2 := {8,8,8,8,8,8}
 print s2
 
-
 // lists
-
 var l: [1, 2, 3, 4]
-
 var mixList: [1, "b"]
 print l
 assert l[1]=2 "result should be 2 but is #{l[1]}"
@@ -19,19 +16,17 @@ print l
 
 // sets
 var s: {1, 2, 3, 4}
-// TODO make this OK with union types
-//var badSet: {"a", 4, 4.8}
+var mixSet: {"a", 4, 4.8}
 print s
 //print "expect error: " & s[0]
 
 // maps
 var m: (a => 9, b => 11, z=>33)
-// TODO make this work with union types [currently: Type.Any]
 var m2: (a => 9, b => 11, z => "string")
 print m
 print m2
 print "expect 9: " & m["a"]
-//print "expect 9: " & m[a]
+print "expect 9: " & m[a]
 //print m["x"]
 print m.b
 m.a := 1000
