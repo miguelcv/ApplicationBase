@@ -9,6 +9,7 @@ import java.util.Map.Entry;
 import org.mcv.math.BigInteger;
 import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Params.ParamFormal;
+import org.mcv.uom.UnitValue;
 
 public class Signature {
 	
@@ -59,6 +60,8 @@ public class Signature {
 			return Type.String;
 		if (clz.equals(BigInteger.class))
 			return Type.Int;
+		if (clz.equals(UnitValue.class))
+			return Type.Real;
 		if (clz.equals(MuException.class))
 			return Type.Exception;
 		if (clz.equals(Double.class) || clz.equals(double.class))

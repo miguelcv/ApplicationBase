@@ -10,6 +10,10 @@ public class MuException extends RuntimeException {
 		this.value = value;
 	}
 
+	public MuException(String fmt, Object... args) {
+		this.value = new Result(String.format(fmt, args), Type.String);
+	}
+
 	public Object getValue() {
 		return value.value;
 	}

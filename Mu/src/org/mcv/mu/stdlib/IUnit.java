@@ -1,9 +1,10 @@
 package org.mcv.mu.stdlib;
 
+import org.mcv.math.BigInteger;
+import org.mcv.mu.MuException;
 import org.mcv.uom.Bag;
 import org.mcv.uom.Unit;
 import org.mcv.uom.UnitValue;
-import org.mcv.uom.UoMError;
 
 public class IUnit {
 	
@@ -13,7 +14,7 @@ public class IUnit {
 		try {
 			return UnitValue.adapt(a, b);
 		} catch(Exception e) {
-			throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());			
+			throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());			
 		}
 	}
 	
@@ -28,7 +29,7 @@ public class IUnit {
 			}
 			return a.value.compareTo(b.value) > 0;
 		}
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 
 	public static Boolean ge(UnitValue a, UnitValue b) {
@@ -41,7 +42,7 @@ public class IUnit {
 			}
 			return a.value.compareTo(b.value) >= 0;
 		}
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 	
 	public static Boolean lt(UnitValue a, UnitValue b) {
@@ -54,7 +55,7 @@ public class IUnit {
 			}
 			return a.value.compareTo(b.value) < 0;
 		}
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 	
 	public static Boolean le(UnitValue a, UnitValue b) {
@@ -67,7 +68,7 @@ public class IUnit {
 			}
 			return a.value.compareTo(b.value) <= 0;
 		}
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 
 	// EQ
@@ -77,7 +78,7 @@ public class IUnit {
 
 		if(a.matches(b))
 			return a.equals(b);
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 	
 	public static Boolean neq(UnitValue a, UnitValue b) {
@@ -86,7 +87,7 @@ public class IUnit {
 
 		if(a.matches(b))
 			return !eq(a, b);
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 
 	public static Boolean eqeq(UnitValue a, UnitValue b) {
@@ -108,7 +109,7 @@ public class IUnit {
 			}
 			return new UnitValue(a.value + b.value, a.units); 
 		}
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 
 	public static UnitValue minus(UnitValue a, UnitValue b) {
@@ -121,7 +122,7 @@ public class IUnit {
 			}
 			return new UnitValue(a.value - b.value, a.units); 
 		}
-		throw new UoMError(INCOMPATIBLE_UNITS, a.toString(), b.toString());
+		throw new MuException(INCOMPATIBLE_UNITS, a.toString(), b.toString());
 	}
 
 	public static UnitValue neg(UnitValue a) {
@@ -174,7 +175,7 @@ public class IUnit {
 					return mul(a, b);					
 				}
 			}
-			if(!found) {
+			if(!found && !u.unitName.equals("1")) {
 				units.add(new Unit(u.unit, u.pow));
 			}
 		}
@@ -220,7 +221,7 @@ public class IUnit {
 					return div(a, b);					
 				}
 			}
-			if(!found) {
+			if(!found && !u.unitName.equals("1")) {
 				units.add(new Unit(u.unit, u.pow));
 			}
 		}
@@ -266,7 +267,7 @@ public class IUnit {
 					return mul(a, b);					
 				}
 			}
-			if(!found) {
+			if(!found && !u.unitName.equals("1")) {
 				units.add(new Unit(u.unit, u.pow));
 			}
 		}
@@ -275,15 +276,20 @@ public class IUnit {
 	}
 
 	// POW / SQRT
-	public static UnitValue pow(UnitValue a, Integer b) {
+	public static UnitValue pow(UnitValue a, BigInteger b) {
 		a = a.expand();
 		Bag units = new Bag();
 		for(int i=0; i < a.units.size(); i++) {
 			Unit u = a.units.get(i);
-			units.add(new Unit(u.unit, u.pow * Math.abs(b)));
+			units.add(new Unit(u.unit, u.pow * b.abs().intValue()));
 		}
-		Double value = Math.pow(a.value, b);
+		Double value = Math.pow(a.value, b.intValue());
 		return new UnitValue(value, units);
+	}
+
+	// IN
+	public static UnitValue in(UnitValue a, String b) {
+		return a.in(b);
 	}
 
 	// OTHER
@@ -292,7 +298,7 @@ public class IUnit {
 	}
 	
 	public static String toString(UnitValue a) {
-		return a.value + " " + a.units.toString();
+		return a.toString();
 	}
 	
 }

@@ -1,19 +1,21 @@
-* units of measurement
 * spread operator
 * imports, using Git!!
 	import "path/to/file[.mu]" from "git-repo[:commit]" [where (map)]
 	config: git-repo-roots
 	thisname.mu.deps => dep name hash
-* typeof / casting-promotion
+* AS cast
 * native operator definition, non ad-hoc operator mapping
 
-* BUG: line off-by-one
-* BUG: comments and indentation
+* BUG: line off-by-one (or more)
+* BUG: comments and indentation?
 
 * threads, await, async (Actors?)
+
+STDLIB:
 * date/time, regex
 * queues, stacks, trees, bags, bitstrings
 * complex, rational, bcd
+...
 
 * ? automated tests
 * ? macros

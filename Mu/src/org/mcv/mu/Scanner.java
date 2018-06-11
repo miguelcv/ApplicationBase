@@ -6,7 +6,6 @@ import org.mcv.math.BigInteger;
 import org.mcv.uom.Bag;
 import org.mcv.uom.Unit;
 import org.mcv.uom.UnitValue;
-import org.mcv.uom.UoMError;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -658,7 +657,6 @@ class Scanner {
 		}
 	}
 
-	
 	private void addTokenWithUnit(Soperator kind, Object value) {
 		/* Check if Int/Real literal is followed by UnitSpec */
 		/* e.g. 3_km/h */
@@ -673,6 +671,7 @@ class Scanner {
 				}
 				UnitValue uval = new UnitValue(dvalue, units);
 				addToken(UNITLIT, uval);
+				return;
 			}
 		}
 		addToken(kind, value);
@@ -693,11 +692,13 @@ class Scanner {
 				int c = peek();
 				switch (c) {
 				case '/':
+					advance();
 					unit = parseUnit();
 					unit.pow = -unit.pow;
 					units.add(unit);
 					break;
 				case '*':
+					advance();
 					unit = parseUnit();
 					units.add(unit);
 					break;
@@ -706,13 +707,14 @@ class Scanner {
 				case '\n':
 				case '\r':
 				default:
+					advance();
 					break loop;
 				}
 			}			
 			return units;
 			
 		} catch (Exception e) {
-			throw new UoMError("Bad unit literal: %s", e);
+			throw new MuException("Bad unit literal: %s", e);
 		}
 	}
 
@@ -743,7 +745,7 @@ class Scanner {
 			}
 			return new Unit(prefixedUnit, pow);
 		} catch (Exception e) {
-			throw new UoMError("Bad unit literal: " + e);
+			throw new MuException("Bad unit literal: %s", e);
 		}
 	}
 

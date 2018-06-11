@@ -1,6 +1,9 @@
 package org.mcv.mu.stdlib;
 
 import org.mcv.math.BigInteger;
+import org.mcv.uom.Bag;
+import org.mcv.uom.Unit;
+import org.mcv.uom.UnitValue;
 
 public class IInt extends IType {
 	
@@ -171,4 +174,11 @@ public class IInt extends IType {
 	public static Double toReal(BigInteger a) {
 		return a.doubleValue();
 	}
+
+	public static UnitValue toUnit(BigInteger a) {
+		Bag units = new Bag();
+		units.add(new Unit("1", 1));
+		return new UnitValue(a.doubleValue(), units);
+	}
+
 }

@@ -17,6 +17,7 @@ public abstract class Expr {
 		Result visitVarDef(Var expr);
 		Result visitValDef(Val expr);
 		Result visitTypeDefExpr(TypeDef expr);
+		Result visitUnitDefExpr(UnitDefExpr expr);
 		Result visitImportExpr(Import expr);
 		
 		/* print */
@@ -93,7 +94,44 @@ public abstract class Expr {
 			return kind + " " + name.lexeme;
 		}
 	}
-	
+
+	public static class UnitDefExpr extends Expr {
+		
+		UnitDefExpr(Token name, boolean si, String unit, String units, Expr offset, Expr factor, Attributes attrs) {
+			this.name = name;
+			this.si = si;
+			this.type = Type.Unit;
+			this.unit = unit;
+			this.units = units;
+			this.attributes = attrs;
+			this.offset = offset;
+			this.factor = factor;
+			if(attributes.isLocal(false)) {
+				attributes.put(PUBLIC, false);
+			} else {
+				attributes.put(PUBLIC, true);
+			}
+			this.line = name.line;
+		}
+
+		Result accept(Visitor visitor) {
+			return visitor.visitUnitDefExpr(this);
+		}
+			
+		final Token name;
+		final String unit;
+		Expr offset;
+		Expr factor;
+		String units;
+		boolean si;
+		Attributes attributes = new Attributes();
+
+		@Override
+		public String toString() {
+			return "unit " + name;
+		}
+	}
+
 	static class Var extends Expr {
 
 		Var(List<Token> names, Expr initializer, Expr.Map where, Attributes attributes) {
@@ -601,7 +639,7 @@ public abstract class Expr {
 		Expr right;
 		@Override
 		public String toString() {
-			return left + operator.lexeme +  right;
+			return left + " " + operator.lexeme + " " + right;
 		}
 	}
 

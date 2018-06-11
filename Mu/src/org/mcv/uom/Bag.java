@@ -4,13 +4,15 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.mcv.mu.MuException;
+
 public class Bag implements Iterable<Unit> {
 
 	List<Unit> list = new ArrayList<>();
 	
 	public Bag(Bag bag) {
 		for(Unit unit : bag) {
-			list.add(new Unit(unit.unit, unit.pow));
+			list.add(new Unit(unit.unitName, unit.pow));
 		}
 	}
 
@@ -19,16 +21,16 @@ public class Bag implements Iterable<Unit> {
 
 	public void add(Unit unit) {
 		for(Unit u : list) {
-			if(u.unit.name.equals(unit.unit.name)) {
+			if(u.unitName.equals(unit.unitName)) {
 				int pow = u.pow += unit.pow;
 				list.remove(u);
-				list.add(new Unit(u.unit, pow));
+				list.add(new Unit(u.unitName, pow));
 				return;
-			} else if(u.unit.category.equals(unit.unit.category)) {
-				throw new UoMError("Units are not the same scale!");
+			} else if(u.unit != null && u.unit.category.equals(unit.unit.category)) {
+				throw new MuException("Units %s and %s are not the same scale!", u.unitName, unit.unitName);
 			}
 		}
-		list.add(new Unit(unit.unit, unit.pow));
+		list.add(new Unit(unit.unitName, unit.pow));
 	}
 
 	public int size() {

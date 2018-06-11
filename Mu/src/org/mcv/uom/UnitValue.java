@@ -2,6 +2,8 @@ package org.mcv.uom;
 
 import java.io.StringReader;
 
+import org.mcv.mu.MuException;
+
 public class UnitValue {
 	
 	public final Double value;
@@ -24,7 +26,7 @@ public class UnitValue {
 				r.mark(0);
 				int c = r.read();
 				if (c == -1) {
-					throw new UoMError("Bad unit literal: expect value, got EOF");
+					throw new MuException("Bad unit literal: expect value, got EOF");
 				}
 				if (isDoubleLiteral((char) c)) {
 					sb.append((char)c);
@@ -57,13 +59,13 @@ public class UnitValue {
 				case -1:
 					break loop;
 				default:
-					throw new UoMError("Bad unit literal: expect * or /, got " + (char)c);
+					throw new MuException("Bad unit literal: expect * or /, got " + (char)c);
 				}
 			}
 			this.value = value;
 			this.units = units;			
 		} catch (Exception e) {
-			throw new UoMError("Bad unit literal: " + e);
+			throw new MuException("Bad unit literal: ", e);
 		}
 	}
 
@@ -93,13 +95,13 @@ public class UnitValue {
 				case -1:
 					break loop;
 				default:
-					throw new UoMError("Bad unit literal: expect * or /, got " + (char)c);
+					throw new MuException("Bad unit literal: expect * or /, got " + (char)c);
 				}
 			}			
 			return units;
 			
 		} catch (Exception e) {
-			throw new UoMError("Bad unit literal: %s", e);
+			throw new MuException("Bad unit literal: %s", e);
 		}
 	}
 
@@ -128,7 +130,7 @@ public class UnitValue {
 			}
 			return new Unit(prefixedUnit, pow);
 		} catch (Exception e) {
-			throw new UoMError("Bad unit literal: " + e);
+			throw new MuException("Bad unit literal: ", e);
 		}
 	}
 
@@ -208,7 +210,13 @@ public class UnitValue {
 	
 	@Override public String toString() {
 		StringBuilder sb = new StringBuilder();
-		sb.append(value);
+		
+		if(Math.rint(value) == value) {
+			long ival = Math.round(value);
+			sb.append(ival);
+		} else {
+			sb.append(value);
+		}
 		String u = unitsToString();
 		if(!u.isEmpty()) {
 			sb.append("_");
@@ -221,6 +229,7 @@ public class UnitValue {
 		StringBuilder sb = new StringBuilder();
 		for(int i=0; i < units.size(); i++) {
 			Unit u = units.get(i);
+			u.resolve();
 			sb.append(u.toString());
 			if(i==0 && u.unit.category.equals("Unit")) {
 				sb.append("1");
@@ -256,13 +265,13 @@ public class UnitValue {
 		UnitValue thiz = this.toBaseUnit();
 		Double val = thiz.value;
 		if(thiz.units.size() != other.units.size()) {
-			throw new UoMError("Cannot express " + this + " in " + other.unitsToString());
+			throw new MuException("Cannot express " + this + " in " + other.unitsToString());
 		}
 		for(int i=0; i < thiz.units.size(); i++) {
 			Unit u1 = thiz.units.get(i);
 			Unit u2 = other.units.get(i);
 			if(u1.pow != u2.pow || !u1.unit.category.equals(u2.unit.category)) {
-				throw new UoMError("Cannot express " + this + " in " + other.unitsToString());
+				throw new MuException("Cannot express " + this + " in " + other.unitsToString());
 			}
 			if(u1.pow > 0) {
 				val /= Math.pow(u2.unit.factor, u1.pow);
@@ -284,7 +293,10 @@ public class UnitValue {
 			} else {
 				val /= Math.pow(u.unit.factor, Math.abs(u.pow));
 			}
-			String name = Main.catUnit.get(u.unit.category);
+			String name = UnitRepo.catUnit.get(u.unit.category);
+			if(name == null) {
+				throw new MuException("Unknown unit type %s", u.unit.category);
+			}
 			newUnits.add(new Unit(new UnitDef(u.unit.category, name, 0.0, 1.0), u.pow));
 		}
 		return new UnitValue(val, newUnits);
@@ -345,6 +357,14 @@ public class UnitValue {
 		if(expandable) {
 			return adapt(uvFrom.expand(), uvTo.expand());
 		}
-		throw new UoMError("Incompatible units %s %s", uvFrom, uvTo);
+		throw new MuException("Incompatible units %s %s", uvFrom, uvTo);
+	}
+	
+	public void resolve() {
+		for(Unit unit : this.units) {
+			if(unit.unit == null) {
+				unit.resolve();
+			}
+		}
 	}
 }

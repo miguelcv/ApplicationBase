@@ -286,7 +286,7 @@ public class Mu {
 		hadError = true;
 		if(e instanceof MuException) {
 			MuException mue = (MuException)e;
-			System.err.println("Uncaught exception at: " + mue.line + " (" + mue.expr + "): " + mue.value);
+			System.err.println("Uncaught exception at: " + mue.line + " (" + mue.expr + "): " + mue.value.value);
 		} else if(e instanceof InterpreterError) {
 			InterpreterError ie = (InterpreterError)e;
 			System.err.println("Runtime error at: " + (ie.line+1) + " (" + ie.expr + "): " + ie.getMessage());

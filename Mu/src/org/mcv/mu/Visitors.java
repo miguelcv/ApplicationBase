@@ -14,6 +14,8 @@ import org.mcv.mu.Environment.TableEntry;
 import org.mcv.mu.Expr.*;
 import org.mcv.mu.Interpreter.InterpreterError;
 import org.mcv.mu.Type.*;
+import org.mcv.uom.UnitRepo;
+import org.mcv.uom.UnitValue;
 
 public class Visitors implements Expr.Visitor {
 
@@ -386,6 +388,14 @@ public class Visitors implements Expr.Visitor {
 		if (mu.keyword(expr.operator.type) == Keyword.XOR) {
 			return mu.invoke("xor", left, right, expr.type);
 		}
+		if (mu.keyword(expr.operator.type) == Keyword.IN) {
+			// express unit of measurement in other scale
+			return mu.invoke("in", left, right, Type.Real);
+		}
+		if (mu.keyword(expr.operator.type) == Keyword.AS) {
+			// TODO: typecast
+			return mu.invoke("cast", left, right, right.type);
+		}
 
 		switch (mu.soperator(expr.operator.type)) {
 
@@ -439,7 +449,7 @@ public class Visitors implements Expr.Visitor {
 
 		case RIGHTSHIFT:
 			return mu.invoke("rsh", left, right, expr.type);
-
+			
 		default:
 			return new Result(null, Type.Void);
 		}
@@ -535,6 +545,10 @@ public class Visitors implements Expr.Visitor {
 		}
 		if (expr.value instanceof RString) {
 			return new Result(((RString) expr.value).string, Type.String);
+		}
+		if (expr.value instanceof UnitValue) {
+			((UnitValue)expr.value).resolve();
+			return new Result(expr.value, Type.Real);
 		}
 		return new Result(expr.value, type);
 	}
@@ -1067,6 +1081,47 @@ public class Visitors implements Expr.Visitor {
 			return mu.subscript(res, (Seq) expr.sub, expr.value);
 		else
 			throw new InterpreterError(res.value + "(" + res.type + ") is not indexable");
+	}
+
+
+	@Override
+	public Result visitUnitDefExpr(UnitDefExpr expr) {
+		String category = expr.name.lexeme;
+		String unit = expr.unit;
+		double offset = 0.0;
+		double factor = 1.0;
+		if(expr.offset != null) {
+			Result r = mu.evaluate(expr.offset);
+			if(r.type.equals(Type.Real)) {
+				offset = (Double)r.value;
+			}
+			if(r.type.equals(Type.Int)) {
+				offset = ((BigInteger)r.value).doubleValue();
+			}
+		}
+		if(expr.factor != null) {
+			Result r = mu.evaluate(expr.factor);
+			if(r.type.equals(Type.Real)) {
+				factor = (Double)r.value;
+			}
+			if(r.type.equals(Type.Int)) {
+				factor = ((BigInteger)r.value).doubleValue();
+			}
+		}
+		if(expr.units != null && !expr.units.isEmpty()) {
+			// Derived unit(s)
+			if(expr.si) UnitRepo.unitDefs(category, unit, expr.units);
+			else UnitRepo.unitDef(category, unit, expr.units);
+		} else if(offset == 0.0 && factor == 1.0) {
+			// Base unit(s)
+			if(expr.si) UnitRepo.unitDefs(category, unit);
+			else UnitRepo.unitDef(category, unit);
+		} else {
+			// subunit(s)
+			if(expr.si) UnitRepo.unitDefs(category, unit, offset, factor);
+			else UnitRepo.unitDef(category, unit, offset, factor);
+		}
+		return new Result(null, Type.Void);
 	}
 
 }

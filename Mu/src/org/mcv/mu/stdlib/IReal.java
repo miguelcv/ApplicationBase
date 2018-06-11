@@ -1,5 +1,9 @@
 package org.mcv.mu.stdlib;
 
+import org.mcv.uom.Bag;
+import org.mcv.uom.Unit;
+import org.mcv.uom.UnitValue;
+
 public class IReal extends IType {
 
 	public static Boolean gt(Double a, Double b) {
@@ -89,4 +93,15 @@ public class IReal extends IType {
 	public static String toString(Double a) {
 		return String.valueOf(a);
 	}
+	
+	public static UnitValue toUnit(Double a) {
+		Bag units = new Bag();
+		units.add(new Unit("1", 1));
+		return new UnitValue(a, units);
+	}
+
+	public static UnitValue toUnit(UnitValue a) {
+		return a;
+	}
+
 }

@@ -17,6 +17,14 @@ public class UnitDef {
 		this.factor = 1.0;
 	}
 
+	public UnitDef(String category, String name, String units) {
+		this.category = category;
+		this.name = name;
+		this.units = UnitValue.unitSpec(units);
+		this.offset = 0.0;
+		this.factor = 1.0;
+	}
+
 	String category;
 	String name;
 	Double offset;

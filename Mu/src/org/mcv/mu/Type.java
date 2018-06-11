@@ -26,6 +26,7 @@ import org.mcv.mu.stdlib.IRef;
 import org.mcv.mu.stdlib.ISet;
 import org.mcv.mu.stdlib.IString;
 import org.mcv.mu.stdlib.IType;
+import org.mcv.mu.stdlib.IUnit;
 import org.mcv.mu.stdlib.IVoid;
 
 public class Type {
@@ -46,6 +47,8 @@ public class Type {
 	public static Type String = new ListType("String", IString.class, Char);
 	public static Type Type = new Type("Type", IType.class);
 	public static Type Exception = new RefType("Exception", IException.class, Any);
+	// dummy type for units
+	public static Type Unit = new Type("Unit", IUnit.class);
 	
 	public Type(String name, Class<?>javaClass) {
 		this.name = name;
@@ -663,6 +666,7 @@ public class Type {
 			specificValues.add(new Result(values[i].value, Interpreter.typeFromValue(values[i].value)));
 		}
 		Signature sig = new Signature(func, returnType, specificTypes);
+//System.err.print("lookup " + sig);
 		if(interfaces().containsKey(sig)) {
 			return interfaces.get(sig); 
 		}
@@ -684,8 +688,12 @@ public class Type {
 					break;
 				}
 			}
-			if(allOk) return entry.getValue();
+			if(allOk) {
+//				System.err.println("...found");
+				return entry.getValue();
+			}
 		}
+//		System.err.println("...not found");
 		return null;
 	}
 

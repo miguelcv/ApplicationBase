@@ -15,6 +15,7 @@ import java.util.Stack;
 import org.mcv.math.BigInteger;
 import org.mcv.mu.Expr.*;
 import org.mcv.mu.Parser.ParserError;
+import org.mcv.uom.UnitValue;
 
 public class Interpreter {
 
@@ -73,8 +74,8 @@ public class Interpreter {
 						for(Block block : handlers) {
 							executeBlock(block.expressions, environment);
 						}
+						continue;
 					}
-					continue;
 				}
 				me.expr = current;
 				me.line = current.line;
@@ -103,19 +104,33 @@ public class Interpreter {
 	/* invoke binary operator */
 	Result invoke(String op, Result left, Result right, Type returnType) {
 
-		if (!left.type.equals(right.type)) {
-			Result[] converted = widen(left, right);
-			left = converted[0];
-			right = converted[1];
-			returnType = left.type;
+		if(left.value instanceof UnitValue) {
+			left.type = Type.Unit;
+			((UnitValue)left.value).resolve();
 		}
+		if(right.value instanceof UnitValue) {
+			right.type = Type.Unit;
+			((UnitValue)right.value).resolve();
+		}
+		
 		Type type = left.type;
 		Object leftVal = left.value;
 		Object rightVal = right.value;
 		Object func = type.lookup(environment, op, returnType, left, right);
 
 		if (func == null) {
-			throw new InterpreterError("Func " + op + " not found for type " + type);
+			if (!left.type.equals(right.type)) {
+				Result[] converted = widen(left, right);
+				left = converted[0];
+				right = converted[1];
+				leftVal = left.value;
+				rightVal = right.value;
+				returnType = left.type;
+			}
+			func = type.lookup(environment, op, returnType, left, right);
+			if (func == null) {
+				throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
+			}
 		}
 
 		if (func instanceof Method) {
@@ -123,42 +138,31 @@ public class Interpreter {
 			try {
 				return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
 			} catch(IllegalArgumentException iae) {
-				if(leftVal instanceof Double) {
-					double d = (Double)leftVal;
-					if(Double.isNaN(d)) {
-						leftVal = BigInteger.NAN;
+				if (!left.type.equals(right.type)) {
+					Result[] converted = widen(left, right);
+					left = converted[0];
+					right = converted[1];
+					leftVal = left.value;
+					rightVal = right.value;
+					returnType = left.type;
+					func = returnType.lookup(environment, op, returnType, left, right);
+					if (func == null) {
+						throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
 					}
-					if(Double.isInfinite(d)) {
-						if(d == Double.NEGATIVE_INFINITY) {
-							leftVal = BigInteger.NEGATIVE_INFINITY;
-						}
-						if(d == Double.POSITIVE_INFINITY) {
-							leftVal = BigInteger.POSITIVE_INFINITY;
-						}
-					}
-				}
-				if(rightVal instanceof Double) {
-					double d = (Double)rightVal;
-					if(Double.isNaN(d)) {
-						rightVal = BigInteger.NAN;
-					}
-					if(Double.isInfinite(d)) {
-						if(d == Double.NEGATIVE_INFINITY) {
-							rightVal = BigInteger.NEGATIVE_INFINITY;
-						}
-						if(d == Double.POSITIVE_INFINITY) {
-							rightVal = BigInteger.POSITIVE_INFINITY;
-						}
+					try {
+						method = (Method)func;
+						return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
+					} catch(Exception e) {
+						throw new InterpreterError("Error invoking %s for types %s and %s", op, left.type, right.type);
 					}
 				}
-				try {
-					return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
-				} catch(Exception e) {
-					throw new InterpreterError(e);
-				}
+				throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
 			} catch(InvocationTargetException ite) {
 				throw new MuException(new Result(ite.getCause(), Type.Exception));
 			} catch (Exception e) {
+				if(e instanceof InterpreterError) {
+					throw (InterpreterError)e;
+				}
 				throw new InterpreterError("No such operator: %s %s %s", left.type, op, right.type);
 			}
 		} else {
@@ -169,7 +173,13 @@ public class Interpreter {
 
 	/* invoke unary operator */
 	Result invoke(String op, Type returnType, Result arg) {
-		
+
+		if(arg.value instanceof UnitValue) {
+			arg.type = Type.Unit;
+			((UnitValue)arg.value).resolve();
+			returnType = Type.Real;			
+		}
+
 		Object func = arg.type.lookup(environment, op, returnType, arg);
 
 		if (func == null) {
@@ -542,6 +552,9 @@ public class Interpreter {
 			return Type.Int;
 		if (clz.equals(Double.class) || clz.equals(double.class))
 			return Type.Real;
+		if(clz.equals(UnitValue.class)) {
+			return Type.Real;
+		}
 		if (clz.equals(Boolean.class) || clz.equals(boolean.class))
 			return Type.Bool;
 		if (clz.isAssignableFrom(java.util.List.class)) {
@@ -591,6 +604,8 @@ public class Interpreter {
 			}
 			return Type.Real;
 		}
+		if (val instanceof UnitValue)
+			return Type.Unit;
 		if (val instanceof Boolean)
 			return Type.Bool;
 

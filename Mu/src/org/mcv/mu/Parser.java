@@ -97,6 +97,8 @@ class Parser {
 			return importDeclaration(attributes);
 		} else if (match(TYPE)) {
 			return typeDeclaration(attributes);
+		} else if (match(UNIT, SIUNIT)) {
+			return unitDeclaration(attributes);
 		} else if (match(CLASS)) {
 			return templateDeclaration(CLASS.name().toLowerCase(), attributes, false);
 		} else if (match(FUN)) {
@@ -317,6 +319,27 @@ class Parser {
 		Token name = consume(TID, EXPECT_TYPE_NAME);
 		consume(COLON, EXPECT_COLON);
 		return new Expr.TypeDef(name, typeLiteral(name.lexeme), attributes);
+	}
+
+	private Expr unitDeclaration(Attributes attributes) {
+		// [si]unit TID: "unit" [offset factor]|["unitspec"]
+		
+		boolean si = previous().type.equals(SIUNIT);
+		
+		Token name = consume(TID, EXPECT_TYPE_NAME);
+		consume(COLON, EXPECT_COLON);
+		Token id = consume(STRING, "Expect unit name");
+		String unit = (String)id.literal;
+		String units = null;
+		Expr offset = null, factor = null;
+		if(match(STRING)) {
+			units = previous().lexeme;
+		} else if(match(LEFT_BRK)) {
+			Expr.Seq list = (Expr.Seq)list();
+			offset = list.exprs.get(0);
+			factor = list.exprs.get(1);
+		}
+		return new Expr.UnitDefExpr(name, si, unit, units, offset, factor, attributes);
 	}
 
 	private Type typeLiteral(String name) {
@@ -1076,6 +1099,13 @@ class Parser {
 			Expr right = unary();
 			expr = new Expr.Binary(expr, operator, right);
 		}
+		
+		if (match(IN, AS)) {
+			Token operator = previous();
+			Expr right = unary();
+			expr = new Expr.Binary(expr, operator, right);
+		}
+
 		return expr;
 	}
 
@@ -1200,7 +1230,7 @@ class Parser {
 		if (match(NAN))
 			return new Expr.Literal(previous(), Double.NaN);
 
-		if (match(INT, REAL, STRING, CHAR)) {
+		if (match(INT, REAL, STRING, CHAR, UNITLIT)) {
 			return new Expr.Literal(previous(), previous().literal);
 		}
 		if (match(RSTRING)) {
