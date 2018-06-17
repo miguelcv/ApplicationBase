@@ -40,7 +40,7 @@ public class Type {
 	public static Type None = new NoneType("None");
 	public static Type Any = new AnyType("Any", IAny.class);
 	public static Type Void = new SetEnum("Void", IVoid.class, new Symbol("nil"));
-	public static Type Bool = new ListEnum("Bool", IBool.class, List.of(false, true));
+	public static Type Bool = new ListEnum("Bool", IBool.class, false, true);
 	public static Type Int = new ListEnum("Int", IInt.class, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
 	public static Type Real = new ListEnum("Real", IReal.class, Double.MIN_VALUE, Double.MAX_VALUE);
 	public static Type Char = new ListEnum("Char", IChar.class, 0, 0x10FFFF);
@@ -247,8 +247,10 @@ public class Type {
 				for(int i=0; i < len; i++) {
 					Type type = list.get(i);
 					Type otherType = otherList.get(i);
-					if(!type.matches(otherType)) {
-						return false;
+					if(type != null && otherType != null) {
+						if(!type.matches(otherType)) {
+							return false;
+						}
 					}
 				}
 				return true;
@@ -285,7 +287,9 @@ public class Type {
 
 		@Override
 		public List<org.mcv.mu.Type> types() {
-			return List.of(eltType);
+			List<Type> ret = new ArrayList<>();
+			ret.add(eltType);
+			return ret;
 		}
 	}
 
@@ -306,7 +310,9 @@ public class Type {
 
 		@Override
 		public List<org.mcv.mu.Type> types() {
-			return List.of(eltType);
+			List<Type> ret = new ArrayList<>();
+			ret.add(eltType);
+			return ret;
 		}
 	}
 
@@ -327,7 +333,9 @@ public class Type {
 
 		@Override
 		public List<org.mcv.mu.Type> types() {
-			return List.of(valType);
+			List<Type> ret = new ArrayList<>();
+			ret.add(valType);
+			return ret;
 		}
 	}
 
@@ -359,7 +367,9 @@ public class Type {
 
 		@Override
 		public List<org.mcv.mu.Type> types() {
-			return List.of(type);
+			List<Type> ret = new ArrayList<>();
+			ret.add(type);
+			return ret;
 		}
 	}
 

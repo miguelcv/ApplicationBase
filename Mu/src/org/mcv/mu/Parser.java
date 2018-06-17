@@ -86,28 +86,26 @@ class Parser {
 		return statements;
 	}
 
+	Attributes orphaned;
+	
 	/* DECLARATIONS */
 	Expr declaration() {
+		orphaned = null;
 		Attributes attributes = new Attributes();
 		while (isAttribute()) {
 			attribute(attributes);
 			if(match(SEMICOLON));
 		}
-		if (match(IMPORT)) {
-			return importDeclaration(attributes);
-		} else if (match(TYPE)) {
+		if (match(TYPE)) {
 			return typeDeclaration(attributes);
 		} else if (match(UNIT, SIUNIT)) {
 			return unitDeclaration(attributes);
-		} else if (match(CLASS)) {
-			return templateDeclaration(CLASS.name().toLowerCase(), attributes, false);
-		} else if (match(FUN)) {
-			return templateDeclaration(FUN.name().toLowerCase(), attributes, false);
 		} else if (match(VAR)) {
 			return varDeclaration(false, attributes);
 		} else if (match(VAL)) {
 			return valDeclaration(attributes);
 		} else {
+			orphaned = attributes;
 			return statement();
 		}
 	}
@@ -183,7 +181,7 @@ class Parser {
 			returnType = typeLiteral(null);
 		}
 
-		if(!isTypedef) {
+		if(!isTypedef && !attributes.containsKey("jvm")) {
 			consume(COLON, String.format("Must supply a %s body after colon", kind.toLowerCase()));
 			if (match(LEFT_PAREN)) {
 					body = (Block) block();
@@ -266,16 +264,7 @@ class Parser {
 			
 			Expr.Map where = null;
 			if(match(WHERE)) {
-				consume(LEFT_PAREN, EXPECT_LPAREN);
-				List<Expr> exprs = new ArrayList<>();
-				while (!match(RIGHT_PAREN)) {
-					Expr expr = declaration();
-					if (expr == null)
-						continue;
-					exprs.add(expr);
-					match(COMMA);
-					match(SEMICOLON);
-				}
+				List<Expr> exprs = parseMap();
 				where = new Expr.Map(name, exprs);
 			}
 			ParamFormal formal = new ParamFormal(name.lexeme, type, defval, where, attributes);
@@ -285,34 +274,41 @@ class Parser {
 		return params;
 	}
 
+	List<Expr> parseMap() {
+		consume(LEFT_PAREN, EXPECT_LPAREN);
+		return parseMapRest();
+	}
+	
+	List<Expr> parseMapRest() {
+		List<Expr> exprs = new ArrayList<>();
+		while (!match(RIGHT_PAREN)) {
+			Expr expr = declaration();
+			if (expr == null)
+				continue;
+			exprs.add(expr);
+			match(COMMA);
+			match(SEMICOLON);
+		}
+		return exprs;
+	}
+	
 	private Expr importDeclaration(Attributes attributes) {
-		// import "<file-path>" [from "<git-repo[:commit]>"] [as "qname"/QID] [where (map)]
+		// import "" | ([name =>] "", ...) [from "<repo[:xx]>"]
 		Token name = previous();
-		String filename = (String) consume(STRING, "Expected import name").literal;
-		String gitrepo = null;
-		String qid = null;
-		Expr.Map where = null;
+		List<Expr> exprs = new ArrayList<>();
+		if(match(STRING)) {
+			exprs.add(new Expr.Literal(name, previous().literal));
+		} else {
+			exprs = parseMap();
+		}
+		Expr.Map imports = new Expr.Map(name, exprs);
 
+		String repo = null;
 		if(match(FROM)) {
-			gitrepo = (String) consume(STRING, "Expected repo name").literal;
+			repo = (String) consume(STRING, "Expected import name").literal;
 		}
-		if(match(AS)) {
-			qid = (String) consume(STRING, "Expected qualified name").literal;
-		}
-		if(match(WHERE)) {
-			consume(LEFT_PAREN, EXPECT_LPAREN);
-			List<Expr> exprs = new ArrayList<>();
-			while (!match(RIGHT_PAREN)) {
-				Expr expr = declaration();
-				if (expr == null)
-					continue;
-				exprs.add(expr);
-				match(COMMA);
-				match(SEMICOLON);
-			}
-			where = new Expr.Map(name, exprs);
-		}
-		return new Expr.Import (name, gitrepo, filename, qid, where, attributes);
+
+		return new Expr.Import (name, imports, repo, attributes);
 	}
 
 	private Expr typeDeclaration(Attributes attributes) {
@@ -375,12 +371,12 @@ class Parser {
 				throw new ParserError("Enum types can only be defined in typedefs");
 			}
 			if (match(LEFT_BRACE)) {
-				return new Type.SetEnum(name, new HashSet<Object>(eval(set())));
+				return new Type.SetEnum(name, new HashSet<Object>(evalEnum(set())));
 			} else {
 				boolean hasBrk = false;
 				if (match(LEFT_BRK))
 					hasBrk = true;
-				return new Type.ListEnum(name, eval(list(hasBrk)));
+				return new Type.ListEnum(name, evalEnum(list(hasBrk)));
 			}
 		}
 
@@ -422,7 +418,7 @@ class Parser {
 		return new Type.SignatureType(def);
 	}
 
-	private List<Object> eval(Expr se) {
+	private List<Object> evalEnum(Expr se) {
 		List<Object> ret = new ArrayList<>();
 		if (se instanceof Expr.Set) {
 			Expr.Set set = (Expr.Set) se;
@@ -492,16 +488,7 @@ class Parser {
 		}
 		Expr.Map where = null;
 		if(match(WHERE)) {
-			consume(LEFT_PAREN, EXPECT_LPAREN);
-			List<Expr> exprs = new ArrayList<>();
-			while (!match(RIGHT_PAREN)) {
-				Expr expr = declaration();
-				if (expr == null)
-					continue;
-				exprs.add(expr);
-				match(COMMA);
-				match(SEMICOLON);
-			}
+			List<Expr> exprs = parseMap();
 			where = new Expr.Map(names.get(0), exprs);
 		}
 		if(noVar) {
@@ -528,16 +515,7 @@ class Parser {
 		}
 		Expr.Map where = null;
 		if(match(WHERE)) {
-			consume(LEFT_PAREN, EXPECT_LPAREN);
-			List<Expr> exprs = new ArrayList<>();
-			while (!match(RIGHT_PAREN)) {
-				Expr expr = declaration();
-				if (expr == null)
-					continue;
-				exprs.add(expr);
-				match(COMMA);
-				match(SEMICOLON);
-			}
+			List<Expr> exprs = parseMap();
 			where = new Expr.Map(names.get(0), exprs);
 		}
 		return new Expr.Val(names, initializer, where, attributes);
@@ -630,15 +608,7 @@ class Parser {
 		Token tok = previous();
 		if (!callable())
 			return last;
-		List<Expr> exprs = new ArrayList<>();
-		while (!match(RIGHT_PAREN)) {
-			Expr expr = declaration();
-			if (expr == null)
-				continue;
-			exprs.add(expr);
-			match(COMMA);
-			match(SEMICOLON);
-		}
+		List<Expr> exprs = parseMapRest();
 		return new Expr.Call(last, new Expr.Map(tok, exprs), safe);
 	}
 
@@ -851,7 +821,7 @@ class Parser {
 
 	private Expr assignment() {
 
-		Expr expr = conditionOrLoop();
+		Expr expr = assignableDecl();
 
 		if (match(ASSIGN, PLUSIS, MINIS, STARIS, SLASHIS, POWIS, PERCENTIS, ANDIS, ORIS, LSHIFTIS, RSHIFTIS)) {
 			Token op = previous();
@@ -888,6 +858,29 @@ class Parser {
 		return expr;
 	}
 
+	private Expr assignableDecl() {
+		Attributes attributes = new Attributes();
+		if(orphaned == null) {
+			while (isAttribute()) {
+				attribute(attributes);
+				if(match(SEMICOLON));
+			}
+		} else {
+			attributes = orphaned;
+			orphaned = null;
+		}
+
+		if (match(IMPORT)) {
+			return importDeclaration(attributes);
+		} else if (match(CLASS)) {
+			return templateDeclaration(CLASS.name().toLowerCase(), attributes, false);
+		} else if (match(FUN)) {
+			return templateDeclaration(FUN.name().toLowerCase(), attributes, false);
+		}
+		
+		return conditionOrLoop();
+	}
+	
 	private Expr conditionOrLoop() {
 		if (match(IF))
 			return ifExpression(previous());

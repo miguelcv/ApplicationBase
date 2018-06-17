@@ -1,7 +1,9 @@
 package org.mcv.mu;
 
+import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URLClassLoader;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -13,7 +15,11 @@ import java.util.Set;
 import java.util.Stack;
 
 import org.mcv.math.BigInteger;
-import org.mcv.mu.Expr.*;
+import org.mcv.mu.Expr.Assign;
+import org.mcv.mu.Expr.Block;
+import org.mcv.mu.Expr.Seq;
+import org.mcv.mu.Expr.TemplateDef;
+import org.mcv.mu.Expr.Variable;
 import org.mcv.mu.Parser.ParserError;
 import org.mcv.uom.UnitValue;
 
@@ -23,13 +29,15 @@ public class Interpreter {
 	Environment environment;
 	Visitors visitors;
 	Mu handler;
-	
+	URLClassLoader classLoader;
+	// Set<URL> classpath = new HashSet<>();
+
 	Expr current;
 
 	public static class InterpreterError extends ParserError {
 		private static final long serialVersionUID = 1L;
 		protected Expr expr;
-		
+
 		public InterpreterError(String msg) {
 			super(msg);
 		}
@@ -50,6 +58,10 @@ public class Interpreter {
 		main.define("μ", new Result(this, Type.Any), false, true);
 	}
 
+	public Result evalFile(File path, Environment env) {
+		return handler.evalFile(path, env);
+	}
+
 	// DEBUG
 	List<Expr> gexpressions;
 
@@ -58,20 +70,31 @@ public class Interpreter {
 		gexpressions = expressions;
 		for (Expr current : expressions) {
 			try {
+				boolean isImport = false;
+				if(current instanceof Expr.Import) {
+					isImport = true;
+				}
 				Result result = evaluate(current);
-				if(result.type.equals(Type.Exception)) {
-					throw (MuException)result.value;
+				if (result.type.equals(Type.Exception)) {
+					throw (MuException) result.value;
+				}
+				if(isImport) {
+					@SuppressWarnings("unchecked")
+					ListMap<Object>listmap = (ListMap<Object>)result.value;
+					for(Entry<String, Object> entry : listmap.entrySet()) {
+						environment.define(entry.getKey(), new Result(entry.getValue(), Interpreter.typeFromValue(entry.getValue())), false, true);
+					}
 				}
 			} catch (ReturnJump ret) {
 				System.out.println("Program exited with: " + stringify(ret.value));
 				return;
 			} catch (MuException me) {
-				if(environment.get("$this") != null) {
-					Template tmpl = (Template)environment.get("$this").value;
-					if(tmpl.errors != null && !tmpl.errors.isEmpty()) {
+				if (environment.get("$this") != null) {
+					Template tmpl = (Template) environment.get("$this").value;
+					if (tmpl.errors != null && !tmpl.errors.isEmpty()) {
 						Stack<Block> handlers = tmpl.errors;
 						environment.define("$exception", new Result(me, Type.Exception), false, false);
-						for(Block block : handlers) {
+						for (Block block : handlers) {
 							executeBlock(block.expressions, environment);
 						}
 						continue;
@@ -95,8 +118,8 @@ public class Interpreter {
 
 	Result evaluate(Expr expr) {
 		Result res = expr.accept(visitors);
-		if(res.value instanceof Expr) {
-			return ((Expr)res.value).accept(visitors);
+		if (res != null && res.value instanceof Expr) {
+			return ((Expr) res.value).accept(visitors);
 		}
 		return res;
 	}
@@ -104,15 +127,15 @@ public class Interpreter {
 	/* invoke binary operator */
 	Result invoke(String op, Result left, Result right, Type returnType) {
 
-		if(left.value instanceof UnitValue) {
+		if (left.value instanceof UnitValue) {
 			left.type = Type.Unit;
-			((UnitValue)left.value).resolve();
+			((UnitValue) left.value).resolve();
 		}
-		if(right.value instanceof UnitValue) {
+		if (right.value instanceof UnitValue) {
 			right.type = Type.Unit;
-			((UnitValue)right.value).resolve();
+			((UnitValue) right.value).resolve();
 		}
-		
+
 		Type type = left.type;
 		Object leftVal = left.value;
 		Object rightVal = right.value;
@@ -137,7 +160,7 @@ public class Interpreter {
 			Method method = (Method) func;
 			try {
 				return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
-			} catch(IllegalArgumentException iae) {
+			} catch (IllegalArgumentException iae) {
 				if (!left.type.equals(right.type)) {
 					Result[] converted = widen(left, right);
 					left = converted[0];
@@ -150,18 +173,19 @@ public class Interpreter {
 						throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
 					}
 					try {
-						method = (Method)func;
-						return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
-					} catch(Exception e) {
+						method = (Method) func;
+						return new Result(method.invoke(null, leftVal, rightVal),
+								typeFromClass(method.getReturnType()));
+					} catch (Exception e) {
 						throw new InterpreterError("Error invoking %s for types %s and %s", op, left.type, right.type);
 					}
 				}
 				throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
-			} catch(InvocationTargetException ite) {
+			} catch (InvocationTargetException ite) {
 				throw new MuException(new Result(ite.getCause(), Type.Exception));
 			} catch (Exception e) {
-				if(e instanceof InterpreterError) {
-					throw (InterpreterError)e;
+				if (e instanceof InterpreterError) {
+					throw (InterpreterError) e;
 				}
 				throw new InterpreterError("No such operator: %s %s %s", left.type, op, right.type);
 			}
@@ -174,10 +198,10 @@ public class Interpreter {
 	/* invoke unary operator */
 	Result invoke(String op, Type returnType, Result arg) {
 
-		if(arg.value instanceof UnitValue) {
+		if (arg.value instanceof UnitValue) {
 			arg.type = Type.Unit;
-			((UnitValue)arg.value).resolve();
-			returnType = Type.Real;			
+			((UnitValue) arg.value).resolve();
+			returnType = Type.Real;
 		}
 
 		Object func = arg.type.lookup(environment, op, returnType, arg);
@@ -190,23 +214,23 @@ public class Interpreter {
 			Method method = (Method) func;
 			try {
 				return new Result(method.invoke(null, arg.value), returnType);
-			} catch(IllegalArgumentException iae) {
-				if(arg.value instanceof Double) {
-					double d = (Double)arg.value;
-					if(Double.isNaN(d)) {
+			} catch (IllegalArgumentException iae) {
+				if (arg.value instanceof Double) {
+					double d = (Double) arg.value;
+					if (Double.isNaN(d)) {
 						arg.value = BigInteger.NAN;
 					}
-					if(Double.isInfinite(d)) {
-						if(d == Double.NEGATIVE_INFINITY) {
+					if (Double.isInfinite(d)) {
+						if (d == Double.NEGATIVE_INFINITY) {
 							arg.value = BigInteger.NEGATIVE_INFINITY;
 						}
-						if(d == Double.POSITIVE_INFINITY) {
+						if (d == Double.POSITIVE_INFINITY) {
 							arg.value = BigInteger.POSITIVE_INFINITY;
 						}
 					}
 					try {
 						return new Result(method.invoke(null, arg.value), typeFromClass(method.getReturnType()));
-					} catch(Exception e) {
+					} catch (Exception e) {
 						throw new InterpreterError(e);
 					}
 				}
@@ -250,49 +274,49 @@ public class Interpreter {
 		Iterator<Object> it = null;
 		Map<String, Object> map = null;
 		Result value;
-		
+
 		@SuppressWarnings("unchecked")
 		public Source(int n, Result value) {
 			this.value = value;
-			if(n > 1) {
-				if(value.value instanceof List) {
+			if (n > 1) {
+				if (value.value instanceof List) {
 					it = ((List<Object>) value.value).iterator();
 				}
-				if(value.value instanceof Map) {
-					map = (Map<String, Object>)value.value;
+				if (value.value instanceof Map) {
+					map = (Map<String, Object>) value.value;
 				}
 			}
 		}
 
 		public Result next(String key) {
-			if(it != null) {
-				if(it.hasNext()) {
+			if (it != null) {
+				if (it.hasNext()) {
 					Object next = it.next();
-					return new Result(next, ((Type.ListType)value.type).eltType);
+					return new Result(next, ((Type.ListType) value.type).eltType);
 				}
 				return new Result(null, Type.Void);
 			}
-			if(map != null) {
-				if(map.containsKey(key)) {
+			if (map != null) {
+				if (map.containsKey(key)) {
 					Object val = map.get(key);
-					return new Result(val, ((Type.MapType)value.type).valType);
+					return new Result(val, ((Type.MapType) value.type).valType);
 				}
 				return new Result(null, Type.Void);
 			}
 			return value;
 		}
 	}
-	
+
 	Result assign(Assign expr, Result value) {
 		Result result = null;
 		Source src = new Source(expr.var.size(), value);
-		for(Token tok : expr.var) {
+		for (Token tok : expr.var) {
 			Result curr = environment.get(tok.lexeme);
-			if(curr == null) {
+			if (curr == null) {
 				throw new InterpreterError("Undefined variable %s", tok.lexeme);
 			}
-			if(curr.value instanceof Property) {
-				callSetter((Property)curr.value, src.next(tok.lexeme));
+			if (curr.value instanceof Property) {
+				callSetter((Property) curr.value, src.next(tok.lexeme));
 			}
 			result = environment.assign(tok, src.next(tok.lexeme));
 		}
@@ -301,15 +325,14 @@ public class Interpreter {
 
 	Result assign(Variable expr, Result value) {
 		Result curr = environment.get(expr.name);
-		if(curr == null) {
+		if (curr == null) {
 			throw new InterpreterError("Undefined variable", expr.name);
 		}
-		if(curr.value instanceof Property) {
-			callSetter((Property)curr.value, value);
+		if (curr.value instanceof Property) {
+			callSetter((Property) curr.value, value);
 		}
 		return environment.assign(expr.name, value);
 	}
-
 
 	public Result executeBlock(List<Expr> body, Environment environment) {
 		Environment previous = this.environment;
@@ -324,9 +347,9 @@ public class Interpreter {
 			throw ret;
 		} catch (MuException me) {
 			throw me;
-		} catch(BreakJump brk) {
+		} catch (BreakJump brk) {
 			throw brk;
-		} catch(ContinueJump cnt) {
+		} catch (ContinueJump cnt) {
 			throw cnt;
 		} catch (InterpreterError ie) {
 			throw ie;
@@ -337,21 +360,19 @@ public class Interpreter {
 		}
 	}
 
-
 	public Result executeBlockReturn(List<Expr> body, Environment environment) {
 		Result val = null;
 		try {
 			val = executeBlock(body, environment);
 		} catch (ReturnJump ret) {
 			val = ret.value;
-		} catch(BreakJump brk) {
+		} catch (BreakJump brk) {
 			// ignore
-		} catch(ContinueJump cnt) {
+		} catch (ContinueJump cnt) {
 			// ignore
 		}
 		return val;
 	}
-
 
 	public static <A, B> List<Pair<A, B>> zip(List<A> listA, List<B> listB) {
 		if (listA.size() != listB.size()) {
@@ -376,9 +397,9 @@ public class Interpreter {
 				valType = Type.unite(valType, value.type);
 			} else {
 				boolean spread = spread(expr);
-				if(spread) {
-					listmap.putAll((ListMap<?>)value.value);
-					valType = Type.unite(valType, value.type);					
+				if (spread) {
+					listmap.putAll((ListMap<?>) value.value);
+					valType = Type.unite(valType, value.type);
 				} else {
 					listmap.put(null, value.value);
 					valType = Type.unite(valType, value.type);
@@ -402,7 +423,7 @@ public class Interpreter {
 
 	Result call(Result func, Expr.Map args) {
 		if (func.value instanceof Callee) {
-			return Template.call(((Callee)func.value).parent, this, args);
+			return Template.call((Callee) func.value, this, args);
 		} else if (func.value instanceof Template) {
 			return Template.call((Template) func.value, this, args);
 		} else {
@@ -410,13 +431,20 @@ public class Interpreter {
 		}
 	}
 
-	@SuppressWarnings("unchecked") Result subscript(Result listMap, Seq index, Expr value) {
-		Result sub = evaluate(index.exprs.get(0));
+	@SuppressWarnings("unchecked")
+	Result subscript(Result listMap, Seq index, Expr value) {
+
 		if (value != null) {
 			Object val = evaluate(value).value;
 			/* setter */
 			if (listMap.value instanceof Map) {
-				String key = (String) sub.value;
+				String key = null;
+				if (index.exprs.get(0) instanceof Expr.Variable) {
+					key = ((Expr.Variable) index.exprs.get(0)).name.lexeme;
+				} else {
+					Result sub = evaluate(index.exprs.get(0));
+					key = (String) sub.value;
+				}
 				Map<String, Object> map = (Map<String, Object>) listMap.value;
 				if (map.containsKey(key)) {
 					map.put(key, val);
@@ -425,6 +453,7 @@ public class Interpreter {
 				}
 			}
 			if (listMap.value instanceof List) {
+				Result sub = evaluate(index.exprs.get(0));
 				List<Object> list = ((List<Object>) listMap.value);
 				int ix = ((BigInteger) sub.value).intValue();
 				if (ix < 0)
@@ -435,7 +464,13 @@ public class Interpreter {
 		} else {
 			/* getter */
 			if (listMap.value instanceof Map) {
-				String key = (String) sub.value;
+				String key = null;
+				if (index.exprs.get(0) instanceof Expr.Variable) {
+					key = ((Expr.Variable) index.exprs.get(0)).name.lexeme;
+				} else {
+					Result sub = evaluate(index.exprs.get(0));
+					key = (String) sub.value;
+				}
 				Map<String, Object> map = (Map<String, Object>) listMap.value;
 				if (map.containsKey(key)) {
 					Object val = map.get(key);
@@ -445,6 +480,7 @@ public class Interpreter {
 				}
 			}
 			if (listMap.value instanceof List) {
+				Result sub = evaluate(index.exprs.get(0));
 				List<Object> list = (List<Object>) listMap.value;
 				int ix = ((BigInteger) sub.value).intValue();
 				if (ix < 0)
@@ -456,7 +492,8 @@ public class Interpreter {
 		}
 	}
 
-	@SuppressWarnings("unchecked") Result dot(Result listMap, String key) {
+	@SuppressWarnings("unchecked")
+	Result dot(Result listMap, String key) {
 		if (listMap.value instanceof Map) {
 			Object value = ((Map<String, Object>) listMap.value).get(key);
 			return new Result(value, typeFromValue(value));
@@ -466,48 +503,54 @@ public class Interpreter {
 			return new Result(value, typeFromValue(value));
 		}
 		if (listMap.value instanceof Template) {
-			// call getter
 			Template tmpl = (Template) listMap.value;
 			Result value = tmpl.closure.get(key);
-			if(value == null) {
+			if (value == null && tmpl.attributes.containsKey("jvm")) {
+				value = tmpl.closure.get("__jvm_" + key);
+			}
+			if (value == null) {
 				throw new InterpreterError("Interface %s not found", key);
 			}
-			if(value.value instanceof Property) {
-				return callGetter((Property)value.value);
+			if (value.value instanceof Property) {
+				return callGetter((Property) value.value);
 			}
 			return value;
 		}
 		if (listMap.value instanceof Callee) {
 			Callee callee = (Callee) listMap.value;
 			Result value = callee.closure.get(key);
-			
+			if (value == null && callee.parent.attributes.containsKey("jvm")) {
+				value = callee.closure.get("__jvm_" + key);
+				((Callee)value.value).javaObject = callee.javaObject;
+			}
 			/* not found in current object, try mixins */
-			if(value == null) {
-				if(callee.mixins != null) {
-					for(Mixin mixin : callee.mixins) {
+			if (value == null) {
+				if (callee.mixins != null) {
+					for (Mixin mixin : callee.mixins) {
 						key = mixin.where.getOrDefault(key, key);
 						value = mixin.object.closure.get(key);
-						if(value != null) {
+						if (value != null) {
 							break;
 						}
 					}
 				}
 			}
-			if(value == null) {
+			if (value == null) {
 				throw new InterpreterError("Interface %s not found", key);
 			}
-			
+
 			/* Getter */
-			if(value.value instanceof Property) {
+			if (value.value instanceof Property) {
 				/* it's a getter */
-				return callGetter((Property)value.value);
+				return callGetter((Property) value.value);
 			}
 			return value;
 		}
 		return new Result(null, Type.Void);
 	}
 
-	@SuppressWarnings("unchecked") Result setdot(Result listMap, String key, Object value) {
+	@SuppressWarnings("unchecked")
+	Result setdot(Result listMap, String key, Object value) {
 		if (listMap.value instanceof Map) {
 			((Map<String, Object>) listMap.value).put(key, value);
 			return new Result(value, typeFromValue(value));
@@ -520,7 +563,7 @@ public class Interpreter {
 			// call setter
 			Template tmpl = (Template) listMap.value;
 			Result rs = tmpl.closure.get(key);
-			if(rs == null) {
+			if (rs == null) {
 				throw new InterpreterError("Undefined field %s", key);
 			}
 			rs.value = value;
@@ -529,13 +572,13 @@ public class Interpreter {
 			// call setter
 			Callee callee = (Callee) listMap.value;
 			Result rs = callee.closure.get(key);
-			if(rs == null) {
+			if (rs == null) {
 				throw new InterpreterError("Undefined field %s", key);
 			}
-			if(rs.value instanceof Property) {
-				callSetter((Property)rs.value, new Result(value, typeFromValue(value)));
+			if (rs.value instanceof Property) {
+				callSetter((Property) rs.value, new Result(value, typeFromValue(value)));
 			}
-			rs.value = value;				
+			rs.value = value;
 		}
 		return new Result(null, Type.Void);
 	}
@@ -543,11 +586,10 @@ public class Interpreter {
 	/* UTIL */
 
 	static Type typeFromClass(Class<?> clz) {
-		/* We have char, string, int, real, bool */
-		if (clz.equals(Void.class))
+		if (clz.equals(Void.class) || clz.equals(void.class))
 			return Type.Void;
-		if (clz.isAssignableFrom(Type.class))
-			return Type.Type;
+		if (clz.equals(Object.class))
+			return Type.Any;
 		if (clz.equals(Integer.class) || clz.equals(int.class))
 			return Type.Char;
 		if (clz.equals(String.class))
@@ -558,7 +600,7 @@ public class Interpreter {
 			return Type.Int;
 		if (clz.equals(Double.class) || clz.equals(double.class))
 			return Type.Real;
-		if(clz.equals(UnitValue.class)) {
+		if (clz.equals(UnitValue.class)) {
 			return Type.Real;
 		}
 		if (clz.equals(Boolean.class) || clz.equals(boolean.class))
@@ -578,11 +620,14 @@ public class Interpreter {
 		if (clz.isAssignableFrom(Pointer.class)) {
 			return new Type.RefType(Type.Any);
 		}
-		System.err.println("Type is " + clz);
-		return Type.None;
+		if (clz.isAssignableFrom(Type.class)) {
+			return Type.Type;
+		}
+		// System.err.println("Type is " + clz);`
+		return new Type(clz.getSimpleName());
 	}
 
-	public static Type typeFromValue(Object val) {
+	static Type typeFromValue(Object val) {
 
 		/* We have char, string, int, real, bool */
 		if (val == null)
@@ -591,10 +636,10 @@ public class Interpreter {
 			return Type.Type;
 		if (val instanceof Integer)
 			return Type.Char;
-		if(val instanceof Symbol) {
+		if (val instanceof Symbol) {
 			return Type.Any;
 		}
-		if(val.equals(Type.UNDEFINED)) {
+		if (val.equals(Type.UNDEFINED)) {
 			return Type.Any;
 		}
 		if (val instanceof String) {
@@ -605,7 +650,7 @@ public class Interpreter {
 		if (val instanceof BigInteger)
 			return Type.Int;
 		if (val instanceof Double) {
-			if(Double.isNaN((Double)val) || Double.isInfinite((Double)val)) {
+			if (Double.isNaN((Double) val) || Double.isInfinite((Double) val)) {
 				return Type.Int;
 			}
 			return Type.Real;
@@ -638,7 +683,7 @@ public class Interpreter {
 		}
 		if (val instanceof java.util.Map) {
 			@SuppressWarnings("unchecked")
-			Map<String, Object> map = (Map<String,Object>) val;
+			Map<String, Object> map = (Map<String, Object>) val;
 			if (!map.isEmpty()) {
 				return new Type.MapType(typeFromValue(map.values().iterator().next()));
 			} else {
@@ -652,7 +697,7 @@ public class Interpreter {
 			return new Type.SignatureType((TemplateDef) ((Template) val).def);
 		}
 		if (val instanceof Callee) {
-			return new Type.SignatureType((TemplateDef) ((Callee) val).def);
+			return new Type.SignatureType((TemplateDef) ((Callee) val).parent.def);
 		}
 		if (val instanceof Pointer) {
 			return new Type.RefType(((Pointer) val).type);
@@ -661,7 +706,8 @@ public class Interpreter {
 		return Type.None;
 	}
 
-	@SuppressWarnings("unchecked") String stringify(Result obj) {
+	@SuppressWarnings("unchecked")
+	String stringify(Result obj) {
 		if (obj == null || obj.value == null)
 			return "nil";
 		if (obj.value instanceof Integer) {
@@ -749,60 +795,61 @@ public class Interpreter {
 		}
 	}
 
-	@SuppressWarnings("unchecked") boolean isTruthy(Object value, int flags) {
-		
+	@SuppressWarnings("unchecked")
+	boolean isTruthy(Object value, int flags) {
+
 		if (value instanceof Boolean) {
 			return (Boolean) value;
 		}
-		
+
 		if (value == null) {
-			if((flags & 1) != 0) {
+			if ((flags & 1) != 0) {
 				// null => false
 				return false;
 			} else {
 				throw new InterpreterError("Criterion may not be nil");
 			}
 		}
-		
+
 		// fail => false
 		if (value instanceof MuException) {
-			if((flags & 2) != 0) {
+			if ((flags & 2) != 0) {
 				return false;
 			} else {
-				throw (MuException)value;
+				throw (MuException) value;
 			}
 		}
-		
+
 		// empty
 		if (value instanceof String) {
-			if((flags & 4) != 0) {
+			if ((flags & 4) != 0) {
 				String s = (String) value;
 				return !s.isEmpty();
 			}
 		}
-		
+
 		if (value instanceof List) {
-			if((flags & 4) != 0) {
-				List<Object> list = (List<Object>)value;
+			if ((flags & 4) != 0) {
+				List<Object> list = (List<Object>) value;
 				return !list.isEmpty();
 			}
 		}
-		
+
 		if (value instanceof Set) {
-			if((flags & 4) != 0) {
-				Set<Object> set = (Set<Object>)value;
+			if ((flags & 4) != 0) {
+				Set<Object> set = (Set<Object>) value;
 				return !set.isEmpty();
 			}
 		}
-		
+
 		if (value instanceof Map) {
-			if((flags & 4) != 0) {
-				Map<String, Object> map = (Map<String, Object>)value;
+			if ((flags & 4) != 0) {
+				Map<String, Object> map = (Map<String, Object>) value;
 				return !map.isEmpty();
 			}
 		}
-		
-		if(flags != 0) {
+
+		if (flags != 0) {
 			return true;
 		} else {
 			throw new InterpreterError("Criterion must be Bool");
@@ -812,13 +859,13 @@ public class Interpreter {
 	public boolean isTruthy(Expr.Set criteria, Expr expr, boolean invert) {
 		Result crit = null;
 		int flags = 0;
-		if(criteria != null ) {
+		if (criteria != null) {
 			crit = evaluate(criteria);
-			if(crit.value instanceof Set) {
+			if (crit.value instanceof Set) {
 				@SuppressWarnings("unchecked")
-				Set<String> set = (Set<String>)crit.value;
-				for(String elt : set) {
-					switch(elt) {
+				Set<String> set = (Set<String>) crit.value;
+				for (String elt : set) {
+					switch (elt) {
 					case "strict":
 						flags = 0;
 						break;
@@ -856,14 +903,14 @@ public class Interpreter {
 	}
 
 	Result callGetter(Property prop) {
-		Block blk =  prop.get;
+		Block blk = prop.get;
 		Environment env = new Environment("get_" + prop.name, environment);
 		env.define("$value", prop.var, false, true);
 		return executeBlockReturn(blk.expressions, env);
 	}
-	
+
 	void callSetter(Property prop, Result value) {
-		Block blk =  prop.set;
+		Block blk = prop.set;
 		Environment env = new Environment("set_" + prop.name, environment);
 		env.define("$value", prop.var, true, true);
 		env.define("$new", value, true, false);
@@ -872,8 +919,8 @@ public class Interpreter {
 	}
 
 	public boolean spread(Expr expr) {
-		if(expr instanceof Expr.Unary) {
-			Expr.Unary u = (Expr.Unary)expr;
+		if (expr instanceof Expr.Unary) {
+			Expr.Unary u = (Expr.Unary) expr;
 			return u.operator.type.equals(Soperator.STAR);
 		}
 		return false;

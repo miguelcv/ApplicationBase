@@ -1,3 +1,9 @@
+// funcdef assign/init
+val f: fun (Int x) => Int: (
+	4 * x
+)
+print f(4)
+
 // doc-comment
 doc("This is a doc comment")
 fun foo() => Int: (

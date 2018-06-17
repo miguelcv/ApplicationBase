@@ -49,7 +49,7 @@ public class TestMu {
 		if(testDir.exists() && testDir.isDirectory()) {
 			return getMu(testDir);
 		} else {
-			return List.of();
+			return new ArrayList<>();
 		}
 	}
 

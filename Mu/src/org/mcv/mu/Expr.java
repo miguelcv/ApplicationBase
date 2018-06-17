@@ -88,10 +88,10 @@ public abstract class Expr {
 		Params params;
 		Type returnType;
 		Block body;
-		Attributes attributes;
+		Attributes attributes = new Attributes();
 		@Override
 		public String toString() {
-			return kind + " " + name.lexeme;
+			return kind + " " + name.lexeme + params.types() + " => " + returnType;
 		}
 	}
 
@@ -166,7 +166,7 @@ public abstract class Expr {
 
 		final List<Token> names = new ArrayList<>();
 		final Expr initializer;
-		final Attributes attributes;
+		Attributes attributes = new Attributes();
 		Expr.Map where;
 		@Override
 		public String toString() {
@@ -200,7 +200,7 @@ public abstract class Expr {
 		final List<Token> names = new ArrayList<>();
 		final Expr initializer;
 		Expr.Map where;
-		final Attributes attributes;
+		Attributes attributes = new Attributes();
 		@Override
 		public String toString() {
 			return "val " + names + ":" + initializer;
@@ -542,7 +542,8 @@ public abstract class Expr {
 	static class Assign extends Expr {
 		
 		Assign(Token var, Expr value, Token op) {
-			this.var = List.of(var);
+			this.var = new ArrayList<>();
+			this.var.add(var);
 			this.value = value;
 			this.op = op;
 			type = value.type;
@@ -817,7 +818,7 @@ public abstract class Expr {
 		}
 		
 		final Type literal;
-		Attributes attr;
+		Attributes attr = new Attributes();
 		@Override
 		public String toString() {
 			return "type " + literal;
@@ -920,21 +921,17 @@ public abstract class Expr {
 
 	public static class Import extends Expr {
 
-		public Import(Token name, String gitrepo, String filename, String qid, Map where, Attributes attributes) {
+		public Import(Token name, Expr.Map imports, String repo, Attributes attributes) {
 			this.name = name;
-			this.gitrepo = gitrepo;
-			this.filename = filename;
-			this.qid = qid;
-			this.where = where;
+			this.repo = repo;
+			this.imports = imports;
 			this.attributes = attributes;
 		}
 
 		Token name;
-		String gitrepo;
-		String filename;
-		String qid;
-		Map where;
-		Attributes attributes;
+		String repo;
+		Expr.Map imports;
+		Attributes attributes = new Attributes();
 		
 		Result accept(Visitor visitor) {
 			return visitor.visitImportExpr(this);

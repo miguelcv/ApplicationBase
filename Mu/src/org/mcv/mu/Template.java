@@ -1,6 +1,9 @@
 package org.mcv.mu;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Stack;
 
 import org.mcv.mu.Expr.Block;
@@ -10,8 +13,8 @@ import org.mcv.mu.Params.ParamFormal;
 public class Template {
 
 	String kind;
-	Expr def;
-	Attributes attributes;
+	TemplateDef def;
+	Attributes attributes = new Attributes();
 	String name;
 	Params params;
 	Type returnType;
@@ -26,6 +29,11 @@ public class Template {
 	Stack<Block> errors = new Stack<>();
 	Stack<Block> alwayses = new Stack<>();
 	
+	/* JVM classes */
+	Class<?> javaClass = null;
+	List<Method> javaMethodList = new ArrayList<>();
+	List<Constructor<?>> javaConstructorList = new ArrayList<>();
+	
 	Template() {
 	}
 	
@@ -34,7 +42,6 @@ public class Template {
 		params.add(new ParamFormal("*", Type.Any, null, null, new Attributes()));
 		Token tok = new Token(Keyword.FUN, "main", "main", 0);
 		body = new Block(tok, new ArrayList<>());
-		attributes = new Attributes();
 		def = new TemplateDef(tok, "fun", params, Type.Void, body, attributes);
 		kind = "fun";
 		this.name = name;
@@ -61,17 +68,15 @@ public class Template {
 		params.set(key, value);
 	}
 
-	public static synchronized Result call(Template self, Interpreter interpreter, Expr.Map args) {
-		Callee callee = new Callee(self);
-		callee.params = new Params(self.params);
-		callee.def = (TemplateDef)self.def;
+	public static synchronized Result call(Callee callee, Interpreter interpreter, Expr.Map args) {
+		callee.params = new Params(callee.parent.params);
 		
 		callee.params.call(interpreter, callee, args);
 		
 		if (callee.params.curry) {
-			Template curried = new Template((TemplateDef)self.def, callee.closure);
+			Template curried = new Template((TemplateDef)callee.parent.def, callee.closure);
 			curried.params = callee.params;
-			return new Result(curried, new Type.SignatureType((TemplateDef)self.def));
+			return new Result(curried, new Type.SignatureType((TemplateDef)callee.parent.def));
 		}
 		if(!callee.params.rest.isEmpty()) {
 			callee.closure.define("$rest", new Result(callee.params.rest, new Type.MapType(Type.Any)), false, false);
@@ -79,18 +84,23 @@ public class Template {
 			callee.closure.define("$rest", new Result(new ListMap<>(), new Type.MapType(Type.Any)), false, false);
 		}
 		callee.closure.define("$arguments", new Result(callee.params.toMap(), new Type.MapType(Type.Any)), false, true);
-
-		callee.attributes = self.attributes;
 		
 		// add THIS
-		callee.closure.define("$this", new Result(callee, new Type.SignatureType((TemplateDef) self.def)), false, false);
+		callee.closure.define("$this", new Result(callee, new Type.SignatureType((TemplateDef)callee.parent.def)), false, false);
 				
-		callee.around = self.around;
-		callee.befores = copyStack(self.befores);
-		callee.afters = copyStack(self.afters);
-		callee.errors = copyStack(self.errors);
-		callee.alwayses = copyStack(self.alwayses);		
+		callee.around = callee.parent.around;
+		callee.befores = copyStack(callee.parent.befores);
+		callee.afters = copyStack(callee.parent.afters);
+		callee.errors = copyStack(callee.parent.errors);
+		callee.alwayses = copyStack(callee.parent.alwayses);
+		callee.javaClass = callee.parent.javaClass;
+		callee.javaMethodList = callee.parent.javaMethodList;
 		return Callee.call(interpreter, callee);
+	}
+		
+	public static synchronized Result call(Template self, Interpreter interpreter, Expr.Map args) {
+		Callee callee = new Callee(self);
+		return call(callee, interpreter, args);
 	}
 
 	private static Stack<Block> copyStack(Stack<Block> stk) {

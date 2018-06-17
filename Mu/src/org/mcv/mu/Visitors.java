@@ -1,21 +1,44 @@
 package org.mcv.mu;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.mcv.math.BigInteger;
+import org.mcv.mu.Dependency.Coords;
 import org.mcv.mu.Environment.TableEntry;
-import org.mcv.mu.Expr.*;
+import org.mcv.mu.Expr.Assign;
+import org.mcv.mu.Expr.Call;
+import org.mcv.mu.Expr.Dot;
+import org.mcv.mu.Expr.For;
+import org.mcv.mu.Expr.Mapping;
+import org.mcv.mu.Expr.Seq;
+import org.mcv.mu.Expr.Subscript;
+import org.mcv.mu.Expr.TypeDef;
+import org.mcv.mu.Expr.UnitDefExpr;
+import org.mcv.mu.Expr.Val;
+import org.mcv.mu.Expr.Var;
 import org.mcv.mu.Interpreter.InterpreterError;
-import org.mcv.mu.Type.*;
+import org.mcv.mu.Type.ListEnum;
+import org.mcv.mu.Type.ListType;
+import org.mcv.mu.Type.MapType;
+import org.mcv.mu.Type.RefType;
+import org.mcv.mu.Type.SetEnum;
+import org.mcv.mu.Type.SetType;
+import org.mcv.mu.Type.SignatureType;
 import org.mcv.uom.UnitRepo;
 import org.mcv.uom.UnitValue;
+
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class Visitors implements Expr.Visitor {
 
@@ -152,6 +175,14 @@ public class Visitors implements Expr.Visitor {
 				false, true);
 		tmpl.closure.define(stmt.name.lexeme, new Result(tmpl, new Type.SignatureType(stmt)), false, true);
 
+		if(stmt.attributes.containsKey("jvm")) {
+			if(stmt.kind.equals("class")) {
+				// if class: get all subclasses, methods, ...
+				JavaHelper.evalClass(mu, tmpl);
+			}
+			return res;
+		}
+		
 		// define all declarations inside templatedef interface
 		for (Expr expr : tmpl.body.expressions) {
 
@@ -185,7 +216,9 @@ public class Visitors implements Expr.Visitor {
 
 						}
 					}
-					mu.executeBlockReturn(List.of(expr), tmpl.closure);
+					List<Expr> list = new ArrayList<>();
+					list.add(expr);
+					mu.executeBlockReturn(list, tmpl.closure);
 				}
 			}
 
@@ -199,7 +232,9 @@ public class Visitors implements Expr.Visitor {
 							throw new InterpreterError("Name %s already defined.", name.lexeme);
 						}
 					}
-					mu.executeBlockReturn(List.of(expr), tmpl.closure);
+					List<Expr> list = new ArrayList<>();
+					list.add(expr);
+					mu.executeBlockReturn(list, tmpl.closure);
 				}
 			}
 		}
@@ -267,33 +302,116 @@ public class Visitors implements Expr.Visitor {
 
 	@Override
 	public Result visitImportExpr(Expr.Import expr) {
-		// TODO:
-		// get expr.filename
-		// if expr.gitrepo
-		// split gitrepo into repopath : commit
-		// search standard repopaths for repopath
-		// if commit != null
-		// if getDeps(repopath) == null
-		// store commit hash in thisfile.mu.deps
-		// git checkout commit to repopath/hash/*
-		// get filename
-		// else
-		// if(getDeps(repopath) == null
-		// get filename
-		// if workspace is clean
-		// store workspace hash in thisfile.mu.deps
-		// else
-		// git checkout commit to repopath/hash/*
-		// get filename
-		// else
-		// get filename
-		// if not found error
-		// if expr.qid
-		// create map(of map..) in mu.environment
-		// mu.evaluate filename as funcdef in map or root of mu.environment filtered by
-		// expr.where
-		// done
-		return null;
+		Map<String, Dependency> deps = getDeps();
+		ListMap<Template> result = new ListMap<>();
+		if (expr.attributes.containsKey("jvm")) {
+			File jarFile = null;
+			if(expr.repo != null) {
+				jarFile = MavenHelper.mavenImport(expr, deps, mu);
+				if(jarFile != null) {
+					storeDeps(deps);
+				}
+			}
+			Result imp = mu.evaluate(expr.imports);
+			if(imp.value instanceof ListMap) {
+				@SuppressWarnings("unchecked")
+				ListMap<Object> imports = (ListMap<Object>)imp.value;
+				for(Entry<String, Object> entry : imports.entrySet()) {
+					String key = entry.getKey();
+					String value = (String)entry.getValue();
+					if(entry.getKey().startsWith(ListMap.gensym.prefix)) {
+						key = value;
+					}
+					if(jarFile != null) {
+						String regex = value.replace("*", ".*");
+						List<Class<?>> classes = JavaHelper.handleJar(mu.classLoader, jarFile, regex);
+						for(Class<?> clazz : classes) {
+							String k2 = key;
+							if(key.contains("*")) {
+								k2 = clazz.getSimpleName();
+							}
+							result.put(k2, JavaHelper.classToTemplate(mu, clazz.getSimpleName(), clazz));
+						}
+					}
+				}
+			}
+		} else {
+			Result imp = mu.evaluate(expr.imports);
+			if(imp.value instanceof ListMap) {
+				@SuppressWarnings("unchecked")
+				ListMap<Object> imports = (ListMap<Object>)imp.value;
+				for(Entry<String, Object> entry : imports.entrySet()) {
+					String key = entry.getKey();
+					String value = (String)entry.getValue();
+					if(entry.getKey().startsWith(ListMap.gensym.prefix)) {
+						key = strip(value);
+					}
+					@SuppressWarnings("unchecked")
+					File cd = new File((String)((ListMap<Object>)mu.environment.get("system").value).get("currentDirectory"));
+					File muFile = new File(cd, value);
+					if(expr.repo != null) {
+						Coords coords = new Coords(expr.repo);
+						if(deps.get(coords.toKey()) == null) {
+							deps.put(coords.toKey(), new Dependency(coords));
+						}
+						if(coords.version == null) {
+							coords.version = deps.get(coords.toKey()).coords.version;
+						}
+						if(coords.version == null) {
+							coords.version = "master";
+						}
+						muFile = GitHelper.gitImport(coords.toKey(), coords.version, value, deps);
+						storeDeps(deps);
+					}
+					if(muFile.exists()) {
+						Environment env = new Environment("import");
+						result.put(key, (Template)mu.evalFile(muFile, env).value);
+					}
+				}
+			}
+		}
+		return new Result(result, new MapType(Type.Type));
+	}
+
+	private static String strip(String name) {
+		int ix0 = name.lastIndexOf('/') + 1;
+		int ix1 = name.lastIndexOf('.');
+		return name.substring(ix0, ix1);
+	}
+
+	Map<String, Dependency> getDeps() {
+		try {
+			@SuppressWarnings("unchecked")
+			String path = (String) ((ListMap<Object>) mu.environment.get("system").value).get("currentFile");
+			if (path != null) {
+				File f = new File(path + ".json");
+				ObjectMapper mapper = new ObjectMapper();
+				mapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE);
+				mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
+				return mapper.readValue(f, new TypeReference<Map<String, Dependency>>() {
+				});
+			}
+		} catch (Exception e) {
+			//System.err.println(e);
+		}
+		return new HashMap<>();
+	}
+
+	void storeDeps(Map<String, Dependency> deps) {
+		try {
+			@SuppressWarnings("unchecked")
+			String path = (String) ((ListMap<Object>) mu.environment.get("system").value).get("currentFile");
+			if (path != null) {
+				File f = new File(path + ".json");
+				ObjectMapper mapper = new ObjectMapper();
+				mapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE);
+				mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
+				mapper.writerWithDefaultPrettyPrinter().writeValue(f, deps);
+			}
+		} catch (Exception e) {
+			System.err.println(e);
+			/**/
+		}
 	}
 
 	@Override
@@ -324,7 +442,8 @@ public class Visitors implements Expr.Visitor {
 			}
 			if (expr.literal instanceof Type.SetEnum) {
 				for (Object val : ((Type.SetEnum) expr.literal).values) {
-					if(val instanceof String) val = new Symbol((String) val);
+					if (val instanceof String)
+						val = new Symbol((String) val);
 					mu.environment.define(val.toString(), new Result(val, expr.literal), false,
 							expr.attributes.isPublic());
 				}
@@ -449,7 +568,7 @@ public class Visitors implements Expr.Visitor {
 
 		case RIGHTSHIFT:
 			return mu.invoke("rsh", left, right, expr.type);
-			
+
 		default:
 			return new Result(null, Type.Void);
 		}
@@ -550,7 +669,7 @@ public class Visitors implements Expr.Visitor {
 			return new Result(((RString) expr.value).string, Type.String);
 		}
 		if (expr.value instanceof UnitValue) {
-			((UnitValue)expr.value).resolve();
+			((UnitValue) expr.value).resolve();
 			return new Result(expr.value, Type.Real);
 		}
 		return new Result(expr.value, type);
@@ -568,14 +687,14 @@ public class Visitors implements Expr.Visitor {
 		for (Expr expr : lst.exprs) {
 			Result r = mu.evaluate(expr);
 			boolean spread = mu.spread(expr);
-			if(spread) {
+			if (spread) {
 				if (eltType.equals(Type.Any)) {
 					eltType = r.type;
-					result.addAll((List<?>)r.value);
+					result.addAll((List<?>) r.value);
 				} else {
 					eltType = Type.unite(eltType, r.type);
-					result.addAll((List<?>)r.value);
-				}				
+					result.addAll((List<?>) r.value);
+				}
 			} else {
 				if (eltType.equals(Type.Any)) {
 					eltType = r.type;
@@ -596,13 +715,13 @@ public class Visitors implements Expr.Visitor {
 		for (Expr expr : set.exprs) {
 			Result r = mu.evaluate(expr);
 			boolean spread = mu.spread(expr);
-			if(spread) {
+			if (spread) {
 				if (eltType.equals(Type.Any)) {
 					eltType = r.type;
-					result.addAll((Set<?>)r.value);
+					result.addAll((Set<?>) r.value);
 				} else {
 					eltType = Type.unite(eltType, r.type);
-					result.addAll((Set<?>)r.value);
+					result.addAll((Set<?>) r.value);
 				}
 			} else {
 				if (eltType.equals(Type.Any)) {
@@ -611,7 +730,7 @@ public class Visitors implements Expr.Visitor {
 				} else {
 					eltType = Type.unite(eltType, r.type);
 					result.add(r.value);
-				}				
+				}
 			}
 		}
 		return new Result(result, new Type.SetType(eltType));
@@ -913,17 +1032,16 @@ public class Visitors implements Expr.Visitor {
 		if (expr.safe && res.value == null) {
 			return res;
 		}
-		if (res.type instanceof SignatureType)
+		if (res.type instanceof SignatureType) {
 			return mu.call(res, expr.next);
-		else
-			throw new InterpreterError(res.value + "(" + res.type + ") is not callable");
-		// return mu.evaluate(expr.next);
+		}
+		throw new InterpreterError(res.value + "(" + res.type + ") is not callable");
 	}
 
 	@Override
 	public Result visitDotExpr(Dot expr) {
 		Result res = mu.evaluate(expr.current);
-		if(expr.safe && res.value == null) {
+		if (expr.safe && res.value == null) {
 			return res;
 		}
 		String key = ((Expr.Variable) expr.next).name.lexeme;
@@ -937,9 +1055,9 @@ public class Visitors implements Expr.Visitor {
 				}
 				ret = mu.dot(res, key);
 			}
-			if(ret == null || ret.value == null) {
+			if (ret == null || ret.value == null) {
 				Result attr = objectAttributes(key, res);
-				if(attr == null) {
+				if (attr == null) {
 					return ret;
 				} else {
 					return attr;
@@ -947,10 +1065,10 @@ public class Visitors implements Expr.Visitor {
 			} else {
 				return ret;
 			}
-		} catch(InterpreterError e) {
+		} catch (InterpreterError e) {
 			Result attr = objectAttributes(key, res);
-			if(attr == null) {
-				throw new InterpreterError(res.value + "(" + res.type + ") is not selectable");
+			if (attr == null) {
+				throw new InterpreterError(e);
 			} else {
 				return attr;
 			}
@@ -1015,12 +1133,12 @@ public class Visitors implements Expr.Visitor {
 			break;
 		case "returnType":
 			if (res.type instanceof SignatureType) {
-				return new Result(((SignatureType)res.type).returnType, Type.Type);
+				return new Result(((SignatureType) res.type).returnType, Type.Type);
 			}
 			break;
 		case "paramTypes":
 			if (res.type instanceof SignatureType) {
-				SignatureType sig = (SignatureType)res.type;
+				SignatureType sig = (SignatureType) res.type;
 				List<Type> types = sig.params.types();
 				return new Result(types, new ListType(Type.Type));
 			}
@@ -1028,13 +1146,13 @@ public class Visitors implements Expr.Visitor {
 		case "doc":
 			if (res.value instanceof Template) {
 				String doc = (String) ((Template) res.value).attributes.attr.get("doc");
-				if(doc == null) {
-					return new Result("<no doc string>", Type.String);					
+				if (doc == null) {
+					return new Result("<no doc string>", Type.String);
 				}
 				return new Result(doc, Type.String);
 			}
 			if (res.value instanceof Callee) {
-				String doc = (String) ((Callee) res.value).attributes.attr.get("doc");
+				String doc = (String) ((Callee) res.value).parent.attributes.attr.get("doc");
 				return new Result(doc, Type.String);
 			}
 			break;
@@ -1044,7 +1162,7 @@ public class Visitors implements Expr.Visitor {
 				return new Result(attrs, new ListType(Type.String));
 			}
 			if (res.value instanceof Callee) {
-				List<String> attrs = ((Callee) res.value).attributes.attributes();
+				List<String> attrs = ((Callee) res.value).parent.attributes.attributes();
 				return new Result(attrs, new ListType(Type.String));
 			}
 			break;
@@ -1057,18 +1175,18 @@ public class Visitors implements Expr.Visitor {
 
 	private BigInteger ordOf(Result res) {
 		ListEnum enumm = (ListEnum) res.type;
-		if(res.value instanceof Boolean) {
-			return ((Boolean)res.value) ? BigInteger.ONE : BigInteger.ZERO;
+		if (res.value instanceof Boolean) {
+			return ((Boolean) res.value) ? BigInteger.ONE : BigInteger.ZERO;
 		}
-		if(res.value instanceof Character) {
-			int c = (Character)res.value;
+		if (res.value instanceof Character) {
+			int c = (Character) res.value;
 			return BigInteger.valueOf(c);
 		}
-		if(res.value instanceof Integer) {
-			return BigInteger.valueOf((int)res.value);
+		if (res.value instanceof Integer) {
+			return BigInteger.valueOf((int) res.value);
 		}
-		if(res.value instanceof Symbol) {
-			return BigInteger.valueOf(enumm.values.indexOf(res.value));			
+		if (res.value instanceof Symbol) {
+			return BigInteger.valueOf(enumm.values.indexOf(res.value));
 		}
 		return BigInteger.ZERO;
 	}
@@ -1108,43 +1226,48 @@ public class Visitors implements Expr.Visitor {
 			throw new InterpreterError(res.value + "(" + res.type + ") is not indexable");
 	}
 
-
 	@Override
 	public Result visitUnitDefExpr(UnitDefExpr expr) {
 		String category = expr.name.lexeme;
 		String unit = expr.unit;
 		double offset = 0.0;
 		double factor = 1.0;
-		if(expr.offset != null) {
+		if (expr.offset != null) {
 			Result r = mu.evaluate(expr.offset);
-			if(r.type.equals(Type.Real)) {
-				offset = (Double)r.value;
+			if (r.type.equals(Type.Real)) {
+				offset = (Double) r.value;
 			}
-			if(r.type.equals(Type.Int)) {
-				offset = ((BigInteger)r.value).doubleValue();
+			if (r.type.equals(Type.Int)) {
+				offset = ((BigInteger) r.value).doubleValue();
 			}
 		}
-		if(expr.factor != null) {
+		if (expr.factor != null) {
 			Result r = mu.evaluate(expr.factor);
-			if(r.type.equals(Type.Real)) {
-				factor = (Double)r.value;
+			if (r.type.equals(Type.Real)) {
+				factor = (Double) r.value;
 			}
-			if(r.type.equals(Type.Int)) {
-				factor = ((BigInteger)r.value).doubleValue();
+			if (r.type.equals(Type.Int)) {
+				factor = ((BigInteger) r.value).doubleValue();
 			}
 		}
-		if(expr.units != null && !expr.units.isEmpty()) {
+		if (expr.units != null && !expr.units.isEmpty()) {
 			// Derived unit(s)
-			if(expr.si) UnitRepo.unitDefs(category, unit, expr.units);
-			else UnitRepo.unitDef(category, unit, expr.units);
-		} else if(offset == 0.0 && factor == 1.0) {
+			if (expr.si)
+				UnitRepo.unitDefs(category, unit, expr.units);
+			else
+				UnitRepo.unitDef(category, unit, expr.units);
+		} else if (offset == 0.0 && factor == 1.0) {
 			// Base unit(s)
-			if(expr.si) UnitRepo.unitDefs(category, unit);
-			else UnitRepo.unitDef(category, unit);
+			if (expr.si)
+				UnitRepo.unitDefs(category, unit);
+			else
+				UnitRepo.unitDef(category, unit);
 		} else {
 			// subunit(s)
-			if(expr.si) UnitRepo.unitDefs(category, unit, offset, factor);
-			else UnitRepo.unitDef(category, unit, offset, factor);
+			if (expr.si)
+				UnitRepo.unitDefs(category, unit, offset, factor);
+			else
+				UnitRepo.unitDef(category, unit, offset, factor);
 		}
 		return new Result(null, Type.Void);
 	}

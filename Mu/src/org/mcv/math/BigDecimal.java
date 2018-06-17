@@ -4134,64 +4134,6 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
             val[1] = val[1].setScale(val[0].scale, ROUND_UNNECESSARY);
         }
     }
-
-    private static class UnsafeHolder {
-        private static final sun.misc.Unsafe unsafe;
-        private static final long intCompactOffset;
-        private static final long intValOffset;
-        static {
-            try {
-                unsafe = sun.misc.Unsafe.getUnsafe();
-                intCompactOffset = unsafe.objectFieldOffset
-                    (BigDecimal.class.getDeclaredField("intCompact"));
-                intValOffset = unsafe.objectFieldOffset
-                    (BigDecimal.class.getDeclaredField("intVal"));
-            } catch (Exception ex) {
-                throw new ExceptionInInitializerError(ex);
-            }
-        }
-        static void setIntCompactVolatile(BigDecimal bd, long val) {
-            unsafe.putLongVolatile(bd, intCompactOffset, val);
-        }
-
-        static void setIntValVolatile(BigDecimal bd, BigInteger val) {
-            unsafe.putObjectVolatile(bd, intValOffset, val);
-        }
-    }
-
-    /**
-     * Reconstitute the {@code BigDecimal} instance from a stream (that is,
-     * deserialize it).
-     *
-     * @param s the stream being read.
-     */
-    private void readObject(java.io.ObjectInputStream s)
-        throws java.io.IOException, ClassNotFoundException {
-        // Read in all fields
-        s.defaultReadObject();
-        // validate possibly bad fields
-        if (intVal == null) {
-            String message = "BigDecimal: null intVal in stream";
-            throw new java.io.StreamCorruptedException(message);
-        // [all values of scale are now allowed]
-        }
-        UnsafeHolder.setIntCompactVolatile(this, compactValFor(intVal));
-    }
-
-   /**
-    * Serialize this {@code BigDecimal} to the stream in question
-    *
-    * @param s the stream to serialize to.
-    */
-   private void writeObject(java.io.ObjectOutputStream s)
-       throws java.io.IOException {
-       // Must inflate to maintain compatible serial form.
-       if (this.intVal == null)
-           UnsafeHolder.setIntValVolatile(this, BigInteger.valueOf(this.intCompact));
-       // Could reset intVal back to null if it has to be set.
-       s.defaultWriteObject();
-   }
-
     /**
      * Returns the length of the absolute value of a {@code long}, in decimal
      * digits.

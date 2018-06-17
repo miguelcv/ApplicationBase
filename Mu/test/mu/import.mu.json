@@ -1,0 +1,10 @@
+{
+  "miguelcv:ApplicationBase" : {
+    "coords" : {
+      "group" : "miguelcv",
+      "artifact" : "ApplicationBase",
+      "version" : "e44f4fb7cd39dc122783605eddc201843ed0742c"
+    },
+    "dependencies" : [ ]
+  }
+}

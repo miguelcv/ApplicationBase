@@ -62,7 +62,7 @@ class Scanner {
 			e.cp = source.codePointAt(current);
 			e.line = line;
 			handler.error(e);
-			return List.of();
+			return new ArrayList<>();
 		}
 	}
 
@@ -304,6 +304,7 @@ class Scanner {
 			break;
 		case '^':
 		case '⊕':
+		case '⊻':
 			addToken(match('=') ? POWIS : POW);
 			break;
 		case '!':

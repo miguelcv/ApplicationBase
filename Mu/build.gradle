@@ -5,7 +5,7 @@ group = 'org.mcv.mu'
 
 project.ext {
 	layout="eclipse"
-	javaVersion="9"
+	javaVersion="1.8"
 	useUtils=true
 	useLogging=true
 	useLog4j=false
@@ -21,6 +21,8 @@ apply from: "${project.localPluginsUrl}/default.gradle"
 
 dependencies {
 	compile libs.jsoup
+	compile libs.jackson
+	compile "org.eclipse.jgit:org.eclipse.jgit:5.0.0.201805301535-rc2"
 }
 
 apply from: "${project.localPluginsUrl}/jar.gradle"

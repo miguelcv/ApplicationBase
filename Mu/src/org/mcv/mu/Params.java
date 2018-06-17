@@ -38,7 +38,7 @@ public class Params {
 		Object defval;
 		boolean defined;
 		Object val;
-		final Attributes attributes;
+		Attributes attributes = new Attributes();
 		Expr.Map where;
 		
 		@Override
@@ -220,7 +220,7 @@ public class Params {
 					formal.val = value;
 					formal.defined = true;
 				} else {
-					throw new InterpreterError(value + " is not an instance of " + formal.getType());
+					//throw new InterpreterError(value + " is not an instance of " + formal.getType());
 				}
 			}
 		} else {

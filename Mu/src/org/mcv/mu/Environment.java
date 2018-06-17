@@ -67,6 +67,10 @@ class Environment {
 
 	Result assign(Token name, Result result) {
 		String key = name.lexeme;
+		return assign(key, result);
+	}
+	
+	Result assign(String key, Result result) {
 		if (values.containsKey(key)) {
 			TableEntry entry = values.get(key);
 			if (entry.mutable) {
@@ -75,14 +79,14 @@ class Environment {
 				entry.value = result.value;
 				return entry.result();
 			} else {
-				throw new InterpreterError("Variable '%s' is constant", name.lexeme);
+				throw new InterpreterError("Variable '%s' is constant", key);
 			}
 		}
 		if (enclosing != null) {
-			enclosing.assign(name, result);
+			enclosing.assign(key, result);
 			return result;
 		}
-		throw new InterpreterError(UNDEFINED, name.lexeme, printenv());
+		throw new InterpreterError(UNDEFINED, key, printenv());
 	}
 
 	private boolean isUndefined(Object value) {

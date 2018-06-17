@@ -27,8 +27,8 @@
 	</logger>
 
 	<root>
-		<level value="debug" additivity="false"/>
-		<appender-ref ref="console" />
+		<level value="NONE" additivity="false"/>
+		<!-- appender-ref ref="console" /-->
 		<appender-ref ref="file" />
 	</root>
 		

@@ -3,7 +3,7 @@ package org.mcv.mu;
 public enum Attribute implements TokenType {
 	NONE,
 	/* funcdefs */
-	LOCAL, 	OVERRIDE,
+	LOCAL, 	JVM,
 	/* var/valdefs */
 	/* create [overridable] getter [var: setter] */
 	PROP,
