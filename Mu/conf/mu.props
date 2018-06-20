@@ -1,6 +1,6 @@
 DEBUG=true
-JARCACHE=c:/users/miguelc/github/Playground/Mu/jars
-GITCACHE=c:/users/miguelc/github/Playground/Mu/git
+JARCACHE=c:/users/miguelc/Mu/jars
+GITCACHE=c:/users/miguelc/Mu/git
 
 MVNREPO.1.Url=https://gonzo.novadoc.nl/artifactory/ext-release-local
 MVNREPO.1.NoSsl=true

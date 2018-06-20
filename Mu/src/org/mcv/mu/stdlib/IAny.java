@@ -54,6 +54,10 @@ public class IAny extends IType {
 		return !eqeq(a, b);
 	}
 
+	public static Object id(Object a) {
+		return a;
+	}	
+
 	public static String toString(Object a) {
 		return String.valueOf(a);
 	}	

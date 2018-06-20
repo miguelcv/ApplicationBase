@@ -3,8 +3,10 @@ package org.mcv.mu;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.URLClassLoader;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -22,6 +24,7 @@ import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Expr.Variable;
 import org.mcv.mu.Parser.ParserError;
 import org.mcv.uom.UnitValue;
+import org.mcv.utils.FileUtils;
 
 public class Interpreter {
 
@@ -29,9 +32,11 @@ public class Interpreter {
 	Environment environment;
 	Visitors visitors;
 	Mu handler;
-	URLClassLoader classLoader;
-	// Set<URL> classpath = new HashSet<>();
-
+	AddableURLClassLoader classLoader;
+	Operators ops = new Operators();
+	Operators prefixOps = new Operators();
+	Operators postfixOps = new Operators();
+	Stack<String> funstk = new Stack<>();
 	Expr current;
 
 	public static class InterpreterError extends ParserError {
@@ -56,19 +61,64 @@ public class Interpreter {
 		handler = mu;
 		this.environment = new Environment("default", main);
 		main.define("μ", new Result(this, Type.Any), false, true);
+		defineOperators();
 	}
 
+	private void defineOperators() {
+		ops.makeOperator(new Signature("and", Type.A,  	Type.A, Type.A), "&");
+		ops.makeOperator(new Signature("or", Type.A,   	Type.A, Type.A), "|");
+		ops.makeOperator(new Signature("xor", Type.A, 	Type.A, Type.A), "⊕", "⊻", "xor");
+		ops.makeOperator(new Signature("in", Type.Unit, Type.A, Type.String), "in");
+		ops.makeOperator(new Signature("as", Type.B, 	Type.A, Type.B), "as");
+		ops.makeOperator(new Signature("lt", Type.Bool,	Type.A, Type.A), "<");
+		ops.makeOperator(new Signature("gt", Type.Bool, 	Type.A, Type.A), ">");
+		ops.makeOperator(new Signature("le", Type.Bool, 	Type.A, Type.A), "<=", "≤");
+		ops.makeOperator(new Signature("ge", Type.Bool, 	Type.A, Type.A), ">=", "≥");
+		ops.makeOperator(new Signature("eq", Type.Bool, 	Type.A, Type.A), "=");
+		ops.makeOperator(new Signature("eqeq", Type.Bool, 	Type.A, Type.A), "==");
+		ops.makeOperator(new Signature("neq", Type.Bool, 	Type.A, Type.A), "~=", "¬=");
+		ops.makeOperator(new Signature("neqeq", Type.Bool, Type.A, Type.A), "~==", "¬==");
+		ops.makeOperator(new Signature("plus", Type.A, 	Type.A, Type.A), "+");
+		ops.makeOperator(new Signature("minus", Type.A, Type.A, Type.A), "-");
+		ops.makeOperator(new Signature("mul", Type.A, Type.A, Type.A), "*", "×");
+		ops.makeOperator(new Signature("div", Type.A, 	Type.A, Type.A), "/", "÷");
+		ops.makeOperator(new Signature("rem", Type.A, 	Type.A, Type.A), "%");
+		ops.makeOperator(new Signature("pow", Type.A, 	Type.A, Type.B), "^");
+		ops.makeOperator(new Signature("lsh", Type.A, 	Type.A, Type.A), "<<");
+		ops.makeOperator(new Signature("rsh", Type.A, 	Type.A, Type.A), ">>");
+
+		prefixOps.makeOperator(new Signature("neg", Type.A, Type.A), "-");
+		prefixOps.makeOperator(new Signature("id", Type.A, Type.A), "+");
+		prefixOps.makeOperator(new Signature("not", Type.A, Type.A), "~", "¬");
+		prefixOps.makeOperator(new Signature("inc", Type.A, Type.A), "++");
+		prefixOps.makeOperator(new Signature("dec", Type.A, Type.A), "--");
+		prefixOps.makeOperator(new Signature("abs", Type.A, Type.A), "abs", "\\");
+		prefixOps.makeOperator(new Signature("ref", new Type.RefType(Type.Any), Type.A), "@");
+		prefixOps.makeOperator(new Signature("deref", Type.A, new Type.RefType(Type.Any)), "↑");
+		prefixOps.makeOperator(new Signature("spread", Type.A, Type.A), "*");
+		prefixOps.makeOperator(new Signature("sqrt", Type.A, Type.A), "sqrt", "√");
+		
+		postfixOps.makeOperator(new Signature("inc", Type.A, Type.A), "++");
+		postfixOps.makeOperator(new Signature("dec", Type.A, Type.A), "--");
+		postfixOps.makeOperator(new Signature("fac", Type.A, Type.A), "!");
+	}
+	
 	public Result evalFile(File path, Environment env) {
 		return handler.evalFile(path, env);
 	}
 
 	// DEBUG
 	List<Expr> gexpressions;
+	int currentLine = 0;
 
 	void interpret(List<Expr> expressions) {
 		// DEBUG
 		gexpressions = expressions;
+		stdMacros();
+		
 		for (Expr current : expressions) {
+			currentLine = current.line;
+			updateMacros(currentLine, funstk.peek());
 			try {
 				boolean isImport = false;
 				if(current instanceof Expr.Import) {
@@ -124,63 +174,57 @@ public class Interpreter {
 		return res;
 	}
 
+	private void stdMacros() {
+		SimpleDateFormat sdf = new SimpleDateFormat("yyy-MM-dd");
+		SimpleDateFormat sdtf = new SimpleDateFormat("HH:mm:ss");
+		// $line
+		environment.define("$line", new Result(BigInteger.ZERO, Type.Int), true, true);
+		// $file
+		@SuppressWarnings("unchecked")
+		File path = new File((String) ((ListMap<Object>) environment.get("system").value).get("currentFile"));
+		environment.define("$file", new Result(path.getAbsolutePath(), Type.String), false, true);
+		String funcname = FileUtils.getFileNameWithoutExtension(path);
+		funstk.push(funcname);
+		// $func
+		environment.define("$func", new Result(funcname, Type.String), true, true);
+		// $date
+		environment.define("$date", new Result(sdf.format(new Date()), Type.String), true, true);
+		// $time
+		environment.define("$time", new Result(sdtf.format(new Date()), Type.String), true, true);		
+	}
+
+	private void updateMacros(int line, String func) {
+		SimpleDateFormat sdf = new SimpleDateFormat("yyy-MM-dd");
+		SimpleDateFormat sdtf = new SimpleDateFormat("HH:mm:ss");
+		// $line
+		environment.define("$line", new Result(BigInteger.valueOf(line), Type.Int), true, true);
+		// $func
+		environment.define("$func", new Result(func, Type.String), true, true);
+		// $date
+		environment.define("$date", new Result(sdf.format(new Date()), Type.String), true, true);
+		// $time
+		environment.define("$time", new Result(sdtf.format(new Date()), Type.String), true, true);		
+	}
+
+	
 	/* invoke binary operator */
-	Result invoke(String op, Result left, Result right, Type returnType) {
+	Result invoke(String op, Result left, Result right, Signature sig) {
 
-		if (left.value instanceof UnitValue) {
-			left.type = Type.Unit;
-			((UnitValue) left.value).resolve();
-		}
-		if (right.value instanceof UnitValue) {
-			right.type = Type.Unit;
-			((UnitValue) right.value).resolve();
-		}
-
-		Type type = left.type;
+		Type type = Type.evaluate(left.type, this.environment);
 		Object leftVal = left.value;
 		Object rightVal = right.value;
-		Object func = type.lookup(environment, op, returnType, left, right);
+		Object func = type.lookup(op, sig);
 
 		if (func == null) {
-			if (!left.type.equals(right.type)) {
-				Result[] converted = widen(left, right);
-				left = converted[0];
-				right = converted[1];
-				leftVal = left.value;
-				rightVal = right.value;
-				returnType = left.type;
-			}
-			func = type.lookup(environment, op, returnType, left, right);
-			if (func == null) {
-				throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
-			}
+			throw new MuException("Func '%s' not found for types %s and %s", op, left.type, right.type);
 		}
 
 		if (func instanceof Method) {
 			Method method = (Method) func;
 			try {
-				return new Result(method.invoke(null, leftVal, rightVal), typeFromClass(method.getReturnType()));
+				return new Result(method.invoke(null, leftVal, rightVal), sig.returnType);
 			} catch (IllegalArgumentException iae) {
-				if (!left.type.equals(right.type)) {
-					Result[] converted = widen(left, right);
-					left = converted[0];
-					right = converted[1];
-					leftVal = left.value;
-					rightVal = right.value;
-					returnType = left.type;
-					func = returnType.lookup(environment, op, returnType, left, right);
-					if (func == null) {
-						throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
-					}
-					try {
-						method = (Method) func;
-						return new Result(method.invoke(null, leftVal, rightVal),
-								typeFromClass(method.getReturnType()));
-					} catch (Exception e) {
-						throw new InterpreterError("Error invoking %s for types %s and %s", op, left.type, right.type);
-					}
-				}
-				throw new InterpreterError("Func %s not found for types %s and %s", op, left.type, right.type);
+				throw new MuException("Func '%s' not found for types %s and %s", op, left.type, right.type);
 			} catch (InvocationTargetException ite) {
 				throw new MuException(new Result(ite.getCause(), Type.Exception));
 			} catch (Exception e) {
@@ -189,22 +233,22 @@ public class Interpreter {
 				}
 				throw new InterpreterError("No such operator: %s %s %s", left.type, op, right.type);
 			}
+		} else if(func instanceof Template) {
+			Template tmpl = (Template)func;
+			List<Expr> exprs = new ArrayList<>();
+			exprs.add(new Expr.Literal(currentLine, left.value));
+			exprs.add(new Expr.Literal(currentLine, right.value));
+			Expr.Map args = new Expr.Map(currentLine, exprs);
+			return Template.call(tmpl, this, args);
 		} else {
-			// TODO allow native operators
-			throw new InterpreterError("No native operator: %s %s %s", left.type, op, right.type);
+			throw new InterpreterError("No operator: %s %s %s", left.type, op, right.type);
 		}
 	}
 
 	/* invoke unary operator */
-	Result invoke(String op, Type returnType, Result arg) {
+	Result invoke(String op, Signature sig, Result arg) {
 
-		if (arg.value instanceof UnitValue) {
-			arg.type = Type.Unit;
-			((UnitValue) arg.value).resolve();
-			returnType = Type.Real;
-		}
-
-		Object func = arg.type.lookup(environment, op, returnType, arg);
+		Object func = arg.type.lookup(op, sig);
 
 		if (func == null) {
 			throw new InterpreterError("Func " + op + " not found for type " + arg.type);
@@ -213,60 +257,18 @@ public class Interpreter {
 		if (func instanceof Method) {
 			Method method = (Method) func;
 			try {
-				return new Result(method.invoke(null, arg.value), returnType);
-			} catch (IllegalArgumentException iae) {
-				if (arg.value instanceof Double) {
-					double d = (Double) arg.value;
-					if (Double.isNaN(d)) {
-						arg.value = BigInteger.NAN;
-					}
-					if (Double.isInfinite(d)) {
-						if (d == Double.NEGATIVE_INFINITY) {
-							arg.value = BigInteger.NEGATIVE_INFINITY;
-						}
-						if (d == Double.POSITIVE_INFINITY) {
-							arg.value = BigInteger.POSITIVE_INFINITY;
-						}
-					}
-					try {
-						return new Result(method.invoke(null, arg.value), typeFromClass(method.getReturnType()));
-					} catch (Exception e) {
-						throw new InterpreterError(e);
-					}
-				}
-				throw new InterpreterError("Error invoking operator: %s %s", op, arg.type);
+				return new Result(method.invoke(null, arg.value), sig.returnType);
 			} catch (Exception e) {
 				throw new InterpreterError("Error invoking operator: %s %s", op, arg.type);
 			}
+		} else if(func instanceof Template) {
+			Template tmpl = (Template)func;
+			List<Expr> exprs = new ArrayList<>();
+			exprs.add(new Expr.Literal(currentLine, arg.value));
+			Expr.Map args = new Expr.Map(currentLine, exprs);
+			return Template.call(tmpl, this, args);
 		} else {
-			throw new InterpreterError("No such operator: %s %s", op, arg.type);
-		}
-	}
-
-	private Result[] widen(Result r1, Result r2) {
-
-		Object func1 = r1.type.lookup(environment, "to" + r2.type, r2.type, r1);
-		Object func2 = r2.type.lookup(environment, "to" + r1.type, r1.type, r2);
-		Result[] res = new Result[2];
-
-		if (func1 != null && func1 instanceof Method) {
-			res[0] = convert((Method) func1, r1);
-			res[1] = r2;
-		} else if (func2 != null && func2 instanceof Method) {
-			res[0] = r1;
-			res[1] = convert((Method) func2, r2);
-		} else {
-			throw new InterpreterError("No conversion between types %s and %s", r1.type, r2.type);
-		}
-		return res;
-	}
-
-	private Result convert(Method func, Result r) {
-		try {
-			Object val = func.invoke(null, r.value);
-			return new Result(val, typeFromClass(val.getClass()));
-		} catch (Exception e) {
-			return r;
+			throw new InterpreterError("No native operator: %s %s", op, arg.type);
 		}
 	}
 
@@ -310,15 +312,15 @@ public class Interpreter {
 	Result assign(Assign expr, Result value) {
 		Result result = null;
 		Source src = new Source(expr.var.size(), value);
-		for (Token tok : expr.var) {
-			Result curr = environment.get(tok.lexeme);
+		for (String var : expr.var) {
+			Result curr = environment.get(var);
 			if (curr == null) {
-				throw new InterpreterError("Undefined variable %s", tok.lexeme);
+				throw new InterpreterError("Undefined variable %s", var);
 			}
 			if (curr.value instanceof Property) {
-				callSetter((Property) curr.value, src.next(tok.lexeme));
+				callSetter((Property) curr.value, src.next(var));
 			}
-			result = environment.assign(tok, src.next(tok.lexeme));
+			result = environment.assign(var, src.next(var));
 		}
 		return result;
 	}
@@ -440,7 +442,7 @@ public class Interpreter {
 			if (listMap.value instanceof Map) {
 				String key = null;
 				if (index.exprs.get(0) instanceof Expr.Variable) {
-					key = ((Expr.Variable) index.exprs.get(0)).name.lexeme;
+					key = ((Expr.Variable) index.exprs.get(0)).name;
 				} else {
 					Result sub = evaluate(index.exprs.get(0));
 					key = (String) sub.value;
@@ -466,7 +468,7 @@ public class Interpreter {
 			if (listMap.value instanceof Map) {
 				String key = null;
 				if (index.exprs.get(0) instanceof Expr.Variable) {
-					key = ((Expr.Variable) index.exprs.get(0)).name.lexeme;
+					key = ((Expr.Variable) index.exprs.get(0)).name;
 				} else {
 					Result sub = evaluate(index.exprs.get(0));
 					key = (String) sub.value;
@@ -921,7 +923,7 @@ public class Interpreter {
 	public boolean spread(Expr expr) {
 		if (expr instanceof Expr.Unary) {
 			Expr.Unary u = (Expr.Unary) expr;
-			return u.operator.type.equals(Soperator.STAR);
+			return u.operator.equals("*");
 		}
 		return false;
 	}

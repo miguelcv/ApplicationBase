@@ -18,11 +18,10 @@ import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Interpreter.InterpreterError;
 import org.mcv.mu.Parser.ParserError;
 import org.mcv.mu.Scanner.ScannerError;
+import org.mcv.utils.Config;
+import org.mcv.utils.FileUtils;
 
 import lombok.extern.slf4j.Slf4j;
-import nl.novadoc.utils.FileUtils;
-import nl.novadoc.utils.config.Config;
-import nl.novadoc.utils.config.sources.PropertiesSource;
 
 @Slf4j
 public class Mu {
@@ -34,7 +33,7 @@ public class Mu {
 	static Config cfg;
 
 	public static void main(String... args) {
-		cfg = new Config(new PropertiesSource("mu.props"));
+		cfg = new Config("mu.props");
 		new Mu(args);
 	}
 
@@ -70,7 +69,7 @@ public class Mu {
 	}
 
 	private void resetDeps(String file) {
-		File depsfile = new File(file + ".json");
+		File depsfile = new File(file + ".deps");
 		depsfile.delete();
 	}
 
@@ -178,6 +177,7 @@ public class Mu {
 	void runPrompt() {
 		try {
 			system.put("currentDirectory", System.getProperty("user.dir"));
+			system.put("currentFile", "REPL");
 
 			InputStreamReader input = new InputStreamReader(System.in, "UTF-8");
 			BufferedReader reader = new BufferedReader(input);
@@ -236,7 +236,7 @@ public class Mu {
 		Scanner scanner = new Scanner(source, main, this);
 		List<Token> tokens = scanner.scanTokens();
 		System.err.flush();
-		Parser parser = new Parser(tokens, main, this);
+		Parser parser = new Parser(tokens, this);
 		List<Expr> statements = parser.parse();
 
 		// Stop if there was a syntax error.
@@ -262,7 +262,7 @@ public class Mu {
 	public Expr parse(String source) {
 		Scanner scanner = new Scanner(source, main, this);
 		List<Token> tokens = scanner.scanTokens();
-		Parser parser = new Parser(tokens, main, this);
+		Parser parser = new Parser(tokens, this);
 		List<Expr> statements = parser.parse();
 
 		// Stop if there was a syntax error.
@@ -295,7 +295,7 @@ public class Mu {
 			String source = header + String.join("\n", normalized) + ")\n";
 			Scanner scanner = new Scanner(source, env, this);
 			List<Token> tokens = scanner.scanTokens();
-			Parser parser = new Parser(tokens, env, this);
+			Parser parser = new Parser(tokens, this);
 			List<Expr> statements = parser.parse();
 			// Stop if there was a syntax error.
 			if (hadError) {
@@ -334,9 +334,5 @@ public class Mu {
 		if (cfg.getString("DEBUG", "false").equals("true")) {
 			log.error(e.toString(), e);
 		}
-	}
-
-	String getLine(int lineno) {
-		return lines.get(lineno);
 	}
 }

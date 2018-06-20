@@ -241,51 +241,67 @@ class Scanner {
 		case '"':
 			string();
 			break;
+		default:
+			maybeOperator(c);
+			break;
+		}
+	}
+	
+	void maybeOperator(int c) {
+		TokenType tok = Soperator.NONE;
+		
+		switch(c) {
+		/* potential operator symbols: */
+		case '$':
+			if(tokstk.isEmpty()) identifier();
+			else tok = DOLLAR;
+			break;
+		case '_':
+			if(tokstk.isEmpty()) identifier();
+			else tok = UNDERSCORE;
+			break;
 		case '@':
-			addToken(ATSIGN);
+			tok = ATSIGN;
 			break;
 		case '#':
-			addToken(SHARP);
+			tok = SHARP;
 			break;
 		case '\\':
-			addToken(BACKSLASH);
+			tok = BACKSLASH;
 			break;
 		case '?':
-			addToken(match('.') ? SAFENAV : match('[') ? SAFESUB : match('(') ? SAFECALL : QUESTION);
+			tok = match('.') ? SAFENAV : match('[') ? SAFESUB : match('(') ? SAFECALL : QUESTION;
 			break;
 		case ',':
-			addToken(COMMA);
+			tok = COMMA;
 			break;
 		case '.':
-			addToken(match('.') ? DOTDOT : DOT);
+			tok = match('.') ? DOTDOT : DOT;
 			break;
 		case ':':
-			addToken(match('=') ? ASSIGN : COLON);
+			tok = match('=') ? ASSIGN : COLON;
 			break;
 		case '←':
-			addToken(ASSIGN);
+			tok = ASSIGN;
 			break;
 		case '→':
-			addToken(ARROW);
+			tok = ARROW;
 			break;
 		case '↑':
-			addToken(UPARROW);
+			tok = UPARROW;
 			break;
-			
 		case 'Ø':
 		case '∅':
-			addToken(EMPTY_SET);
+			tok = EMPTY_SET;
 			break;
 		case '∈':
-			addToken(IN);
+			tok = IN;
 			break;
 		case '∞':
-			addToken(INF);
+			tok = INF;
 			break;
-
-		/* OPERATORS */
 		case '÷':
-			addToken(match('=') ? SLASHIS : SLASH);
+			tok = match('=') ? SLASHIS : SLASH;
 			break;
 		case '/':
 			if (match('/')) {
@@ -296,76 +312,126 @@ class Scanner {
 				/* C Comment */
 				ccomment();
 			} else {
-				addToken(match('=') ? SLASHIS : SLASH);
+				tok = match('=') ? SLASHIS : SLASH;
 			}
 			break;
 		case '%':
-			addToken(match('=') ? PERCENTIS : PERCENT);
+			tok = match('=') ? PERCENTIS : PERCENT;
 			break;
 		case '^':
+			tok = match('=') ? POWIS : POW;
+			break;
 		case '⊕':
 		case '⊻':
-			addToken(match('=') ? POWIS : POW);
+			tok = match('=') ? XORIS : XOR;
 			break;
 		case '!':
-			addToken(BANG);
+			tok = BANG;
 			break;
 		case '-':
-			addToken(match('>') ? ARROW : match('-') ? MINMIN : match('=') ? MINIS : MINUS);
+			tok = match('>') ? ARROW : match('-') ? MINMIN : match('=') ? MINIS : MINUS;
 			break;
 		case '+':
-			addToken(match('+') ? PLUSPLUS : match('=') ? PLUSIS : PLUS);
+			tok = match('+') ? PLUSPLUS : match('=') ? PLUSIS : PLUS;
 			break;
 		case '&':
-			addToken(match('=') ? ANDIS : AND);
+			tok = match('=') ? ANDIS : AND;
 			break;
 		case '|':
-			addToken(match('=') ? ORIS : OR);
+			tok = match('=') ? ORIS : OR;
 			break;
 		case '*':
 		case '×':
-			addToken(match('=') ? STARIS : STAR);
+			tok = match('=') ? STARIS : STAR;
 			break;
 		case '~':
 		case '¬':
-			addToken(match('=') ? (match('=') ? NEQEQ : NOT_EQUAL) : NOT);
+			tok = match('=') ? (match('=') ? NEQEQ : NOT_EQUAL) : NOT;
 			break;
 		case '√':
-			addToken(SQRT);
+			tok = SQRT;
 			break;
-
 		/* RELOPS */
 		case '=':
-			addToken(match('>') ? ARROW : match('=') ? EQEQ : EQUAL);
+			tok = match('>') ? ARROW : match('=') ? EQEQ : EQUAL;
 			break;
 		case '<':
-			addToken(match('=') ? LESS_EQUAL
-					: match('-') ? ASSIGN : match('<') ? (match('=') ? LSHIFTIS : LEFTSHIFT) : LESS);
+			tok = match('=') ? LESS_EQUAL
+					: match('-') ? ASSIGN : match('<') ? (match('=') ? LSHIFTIS : LEFTSHIFT) : LESS;
 			break;
 		case '≤':
-			addToken(LESS_EQUAL);
+			tok = LESS_EQUAL;
 			break;
 		case '>':
-			addToken(match('=') ? GREATER_EQUAL : match('>') ? (match('=') ? RSHIFTIS : RIGHTSHIFT) : GREATER);
+			tok = match('=') ? GREATER_EQUAL : match('>') ? (match('=') ? RSHIFTIS : RIGHTSHIFT) : GREATER;
 			break;
 		case '≥':
-			addToken(GREATER_EQUAL);
+			tok = GREATER_EQUAL;
 			break;
 
 		default:
 			if(isAlpha(c)) {
-				identifier();
-			} else if (isDigit(c)) {
-				number();
-			} else if (isOperator(c)) {
-				addToken(OP);
+				if(tokstk.isEmpty()) {
+					identifier();
+				} else {
+					tok = OPERATOR;
+				}
+			} else if (tokstk.isEmpty() && isDigit(c)) {
+				if(tokstk.isEmpty()) {
+					number();
+				} else {
+					tok = OPERATOR;
+				}
+			} else if (isOperatorStart(c)) {
+				tok = OPERATOR;
 			} else {
-				throw new ScannerError("Unexpected character " + new String(Character.toChars(c)));
+				System.err.println("Unexpected character " + (char)c);
 			}
 			break;
 		}
+		if(tok.equals(Soperator.NONE)) {
+			// comments, identifiers, numbers
+			return;
+		}
+		// else have provisional token
+		// see if next token is operator token
+		boolean allowAscii = false;
+		if(tokstk.isEmpty()) allowAscii = tok.equals(COLON);
+		else allowAscii = tokstk.get(0).equals(COLON);
+		if(isOperatorNext(peek(), allowAscii)) {
+			tokstk.push(tok);
+			maybeOperator(advance());
+		} else {
+			if(tokstk.isEmpty()) {
+				addToken(tok);
+			} else {
+				tokstk.clear();
+				addToken(OPERATOR);
+			}
+		}
 	}
 
+	private boolean isOperatorNext(int c, boolean allowAscii) {
+		if(!allowAscii && c < 128) return false;
+		String asciiOps = "~!@#$%^&*-_=+;:\\|<,>.?/";
+		if(allowAscii && asciiOps.indexOf((char)c) >= 0) return true;
+		if(allowAscii && Character.isAlphabetic(c)) return true;
+		int type = Character.getType(c);
+		return type == Character.MATH_SYMBOL ||
+				type == Character.CURRENCY_SYMBOL ||
+				type == Character.MODIFIER_SYMBOL ||
+				type == Character.OTHER_SYMBOL;
+	}
+
+	private boolean isOperatorStart(int c) {
+		int type = Character.getType(c);
+		return type == Character.MATH_SYMBOL ||
+				type == Character.CURRENCY_SYMBOL ||
+				type == Character.MODIFIER_SYMBOL ||
+				type == Character.OTHER_SYMBOL;
+	}
+
+	Stack<TokenType> tokstk = new Stack<>();
 	Stack<Integer> pystk;
 
 	private void python() {
@@ -404,11 +470,6 @@ class Scanner {
 			}
 		}
 		return ret;
-	}
-
-	private boolean isOperator(int c) {
-		int type = Character.getType(c);
-		return type == Character.MATH_SYMBOL;
 	}
 
 	private void ccomment() {
@@ -561,7 +622,6 @@ class Scanner {
 		for (int i = 0; i < terminatorQ.length(); i++) {
 			advance();
 		}
-
 	}
 
 	private static String substCodes(String string) {

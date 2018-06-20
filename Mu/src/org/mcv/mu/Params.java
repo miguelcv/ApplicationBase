@@ -7,6 +7,7 @@ import java.util.Set;
 
 import org.mcv.mu.Expr.Map;
 import org.mcv.mu.Interpreter.InterpreterError;
+
 import lombok.Data;
 import lombok.NonNull;
 
@@ -120,23 +121,23 @@ public class Params {
 				boolean spread = interpreter.spread(arg);
 				if(spread) {
 					Result aggr = interpreter.evaluate(((Expr.Unary) arg).right);
-					Token tok = ((Expr.Unary) arg).operator;
+
 					if(aggr.value instanceof List) {
 						for(Object next : (List<Object>)aggr.value) {
-							Expr.Literal expr = new Expr.Literal(tok, next);
+							Expr.Literal expr = new Expr.Literal(arg.line, next);
 							setParam(callee, interpreter, expr);
 						}
 					}
 					if(aggr.value instanceof Set) {
 						for(Object next : (Set<Object>)aggr.value) {
-							Expr.Literal expr = new Expr.Literal(tok, next);
+							Expr.Literal expr = new Expr.Literal(arg.line, next);
 							setParam(callee, interpreter, expr);
 						}
 					}
 					if(aggr.value instanceof ListMap) {
 						for(Entry<String, Object> next : ((ListMap<Object>)aggr.value).entrySet()) {
-							Expr.Literal val = new Expr.Literal(tok, next.getValue());
-							Expr.Mapping expr = new Expr.Mapping(tok, next.getKey(), val, false);
+							Expr.Literal val = new Expr.Literal(arg.line, next.getValue());
+							Expr.Mapping expr = new Expr.Mapping(arg.line, next.getKey(), val, false);
 							setParam(callee, interpreter, expr);
 						}
 					}
@@ -220,7 +221,7 @@ public class Params {
 					formal.val = value;
 					formal.defined = true;
 				} else {
-					//throw new InterpreterError(value + " is not an instance of " + formal.getType());
+					throw new MuException(value + " is not an instance of " + formal.getType());
 				}
 			}
 		} else {
@@ -239,7 +240,7 @@ public class Params {
 			callee.parent.closure.define(
 					formal.id, 
 					new Result(
-							new Property(mutable, formal.id, new Result(formal.val, formal.type)), 
+							new Property(interpreter.currentLine, mutable, formal.id, new Result(formal.val, formal.type)), 
 							formal.type),
 					mutable, true);
 		} else {

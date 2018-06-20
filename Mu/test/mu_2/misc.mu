@@ -12,7 +12,7 @@ fun foo() => Int: (
 print foo.doc
 
 // params dependent on other params
-fun testparams(Int a, Int b:a, Int c:a) => Int: (
+fun testparams(Int a, Int b: a, Int c: a) => Int: (
 	a + b + c
 )
 print testparams(5)  // expect 15

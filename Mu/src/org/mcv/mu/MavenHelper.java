@@ -2,9 +2,7 @@ package org.mcv.mu;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.lang.reflect.Method;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,10 +16,9 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.mcv.mu.Dependency.Coords;
 import org.mcv.mu.Expr.Import;
+import org.mcv.utils.Config;
 
 import lombok.extern.slf4j.Slf4j;
-import nl.novadoc.utils.config.Config;
-import nl.novadoc.utils.config.sources.PropertiesSource;
 
 /**
  * @author Miguelc
@@ -45,7 +42,7 @@ public class MavenHelper {
 	private static Repo mavenCentral = new Repo("http://repo2.maven.org/maven2/", false, null);
 	private static Repo jCenter = new Repo("http://jcenter.bintray.com/", false, null);
 	private static String proxy;
-	private static Config cfg = new Config(new PropertiesSource("mu.props"));
+	private static Config cfg = new Config("mu.props");
 	private static String[] jarcache = cfg.getString("JARCACHE").split(",");
 
 	static List<File> download(Coords coords, List<Repo> repos, Dependency deps) {
@@ -241,6 +238,7 @@ public class MavenHelper {
 		List<File> result = download(coords, repos, deps.get(coords.toKey()));
 		if (result != null) {
 			addToClasspath(mu, result.get(0));
+			coords.check(result.get(0));
 			downloadDependencies(mu, result, repos, deps.get(coords.toKey()));
 			return result.get(0);
 		}
@@ -272,7 +270,7 @@ public class MavenHelper {
 
 		for (String cache : jarcache) {
 			File jarFile = new File(cache + "/" + coords.path() + ".jar");
-			if (jarFile.exists()) {
+			if (jarFile.exists() && coords.check(jarFile)) {
 				return jarFile;
 			}
 		}
@@ -286,10 +284,10 @@ public class MavenHelper {
 		List<File> result = new ArrayList<>();
 		for (String cache : jarcache) {
 			File jarFile = new File(cache + "/" + coords.path() + ".jar");
-			if (jarFile.exists()) {
+			if (jarFile.exists() && coords.check(jarFile)) {
 				result.add(jarFile);
 				File pomFile = new File(cache + "/" + coords.path() + ".pom");
-				if (pomFile.exists()) {
+				if (pomFile.exists() && coords.check(pomFile)) {
 					result.add(pomFile);
 					return result;
 				}
@@ -302,11 +300,9 @@ public class MavenHelper {
 		try {
 			URL url = jarFile.toURI().toURL();
 			if(mu.classLoader == null) {
-				mu.classLoader = new URLClassLoader(new URL[] {url}, ClassLoader.getSystemClassLoader());
+				mu.classLoader = new AddableURLClassLoader(new URL[] {url}, ClassLoader.getSystemClassLoader());
 			} else {
-			    Method method = URLClassLoader.class.getDeclaredMethod("addURL", URL.class);
-			    method.setAccessible(true);
-			    method.invoke(mu.classLoader, url);
+			    mu.classLoader.addURL(url);
 			}
 		} catch (Exception e) {
 			throw new Interpreter.InterpreterError(e);

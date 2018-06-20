@@ -6,7 +6,6 @@ import java.io.FileInputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -22,7 +21,9 @@ import org.mcv.mu.Params.ParamFormal;
 
 public class JavaHelper {
 
-	public static List<Class<?>> handleJar(URLClassLoader loader, File jar, String regex) {
+	private static final String JVM = "__jvm_";
+
+	public static List<Class<?>> handleJar(AddableURLClassLoader loader, File jar, String regex) {
 		List<Class<?>> result = new ArrayList<>();
 		try (JarInputStream jarFile = new JarInputStream(new FileInputStream(jar))) {
 			while (true) {
@@ -54,7 +55,7 @@ public class JavaHelper {
 		}
 	}
 
-	public static Class<?> getClass(URLClassLoader loader, String name) {
+	public static Class<?> getClass(AddableURLClassLoader loader, String name) {
 		try {
 			return loader.loadClass(name);
 		} catch (Exception e) {
@@ -73,14 +74,14 @@ public class JavaHelper {
 			// Java has overloaded methods!!
 			// Java is a Lisp2!!
 			Callee callee = null;
-			if (tmpl.closure.get("__jvm_" + method.getName()) != null) {
-				Result res = tmpl.closure.get("__jvm_" + method.getName());
+			if (tmpl.closure.get(JVM + method.getName()) != null) {
+				Result res = tmpl.closure.get(JVM + method.getName());
 				callee = (Callee) res.value;
 				callee.parent.javaMethodList.add(method);
-				tmpl.closure.assign("__jvm_" + method.getName(), new Result(callee, res.type));
+				tmpl.closure.assign(JVM + method.getName(), new Result(callee, res.type));
 			} else {
 				callee = JavaHelper.calleeFromMethod(mu, method, null);
-				tmpl.closure.define("__jvm_" + method.getName(),
+				tmpl.closure.define(JVM + method.getName(),
 						new Result(callee, new Type.SignatureType(callee.parent.def)), true, false);
 			}
 		}
@@ -108,8 +109,8 @@ public class JavaHelper {
 		fun.params.vararg = true;
 		fun.returnType = Type.Any;
 		fun.name = method.getName();
-		fun.def = new TemplateDef(new Token(Keyword.FUN, fun.name, fun.name, -1), "fun", fun.params, fun.returnType,
-				new Expr.Block(new Token(Soperator.LEFT_PAREN, "(", "(", -1), new ArrayList<>()), fun.attributes);
+		fun.def = new TemplateDef(fun.name, mu.currentLine, "fun", fun.params, fun.returnType,
+				new Expr.Block(mu.currentLine, new ArrayList<>()), fun.attributes);
 		fun.javaClass = method.getDeclaringClass();
 		fun.javaMethodList.add(method);
 		Callee callee = new Callee(fun);
@@ -181,9 +182,8 @@ public class JavaHelper {
 
 		Constructor<?>[] constructors = clazz.getConstructors();
 		tmpl.javaConstructorList = Arrays.asList(constructors);
-		Token tok = new Token(Keyword.CLASS, name, name, -1);
-		tmpl.def = new Expr.TemplateDef(tok, "class", tmpl.params, tmpl.returnType,
-				new Expr.Block(tok, new ArrayList<>()), tmpl.attributes);
+		tmpl.def = new Expr.TemplateDef(name, mu.currentLine, "class", tmpl.params, tmpl.returnType,
+				new Expr.Block(mu.currentLine, new ArrayList<>()), tmpl.attributes);
 		tmpl.returnType = new Type.SignatureType((TemplateDef) tmpl.def);
 		evalClass(mu, tmpl);
 
@@ -312,6 +312,7 @@ public class JavaHelper {
 				}
 				return method.invoke(obj.javaObject, args);
 			} catch (Exception e) {
+				// ignore and retry
 			}
 		}
 		throw new Interpreter.InterpreterError("No suitable method: " + obj.javaMethodList.get(0).getName());

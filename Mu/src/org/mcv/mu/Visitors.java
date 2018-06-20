@@ -1,6 +1,7 @@
 package org.mcv.mu;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -20,11 +21,14 @@ import org.mcv.mu.Expr.For;
 import org.mcv.mu.Expr.Mapping;
 import org.mcv.mu.Expr.Seq;
 import org.mcv.mu.Expr.Subscript;
+import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Expr.TypeDef;
 import org.mcv.mu.Expr.UnitDefExpr;
 import org.mcv.mu.Expr.Val;
 import org.mcv.mu.Expr.Var;
 import org.mcv.mu.Interpreter.InterpreterError;
+import org.mcv.mu.Type.EnumType;
+import org.mcv.mu.Type.IntersectionType;
 import org.mcv.mu.Type.ListEnum;
 import org.mcv.mu.Type.ListType;
 import org.mcv.mu.Type.MapType;
@@ -32,6 +36,7 @@ import org.mcv.mu.Type.RefType;
 import org.mcv.mu.Type.SetEnum;
 import org.mcv.mu.Type.SetType;
 import org.mcv.mu.Type.SignatureType;
+import org.mcv.mu.Type.UnionType;
 import org.mcv.uom.UnitRepo;
 import org.mcv.uom.UnitValue;
 
@@ -83,30 +88,28 @@ public class Visitors implements Expr.Visitor {
 			}
 		}
 
-		for (Token name : stmt.names) {
+		for (String name : stmt.names) {
 
-			Result value = src.next(name.lexeme);
+			Result value = src.next(name);
 
 			if (stmt.attributes.isOwn()) {
 				if (stmt.attributes.isProp()) {
-					if (mu.environment.get(name.lexeme) == null) {
-						mu.environment.topLevel().define(name.lexeme,
-								new Result(new Property(true, name.lexeme, value), value.type), true, true);
+					if (mu.environment.get(name) == null) {
+						mu.environment.topLevel().define(name, new Result(new Property(stmt.line, true, name, value), value.type), true, true);
 					} else {
-						val = mu.environment.get(name.lexeme);
+						val = mu.environment.get(name);
 					}
 				} else {
-					if (mu.environment.get(name.lexeme) == null) {
-						mu.environment.topLevel().define(name.lexeme, value, true, stmt.attributes.isPublic());
+					if (mu.environment.get(name) == null) {
+						mu.environment.topLevel().define(name, value, true, stmt.attributes.isPublic());
 					} else {
-						val = mu.environment.get(name.lexeme);
+						val = mu.environment.get(name);
 					}
 				}
 			} else if (stmt.attributes.isProp()) {
-				mu.environment.topLevel().define(name.lexeme,
-						new Result(new Property(true, name.lexeme, value), value.type), true, true);
+				mu.environment.topLevel().define(name, new Result(new Property(stmt.line, true, name, value), value.type), true, true);
 			} else {
-				mu.environment.define(name.lexeme, value, true, stmt.attributes.isPublic());
+				mu.environment.define(name, value, true, stmt.attributes.isPublic());
 			}
 		}
 		return val;
@@ -138,31 +141,29 @@ public class Visitors implements Expr.Visitor {
 			}
 		}
 
-		for (Token name : stmt.names) {
+		for (String name : stmt.names) {
 
-			Result value = src.next(name.lexeme);
+			Result value = src.next(name);
 
 			if (stmt.attributes.isOwn()) {
 				if (stmt.attributes.isProp()) {
-					if (mu.environment.get(name.lexeme) == null) {
-						mu.environment.topLevel().define(name.lexeme,
-								new Result(new Property(false, name.lexeme, value), value.type), false, true);
+					if (mu.environment.get(name) == null) {
+						mu.environment.topLevel().define(name, new Result(new Property(stmt.line, false, name, value), value.type), false, true);
 					} else {
-						val = mu.environment.get(name.lexeme);
+						val = mu.environment.get(name);
 					}
 				} else {
-					if (mu.environment.get(name.lexeme) == null) {
-						mu.environment.topLevel().define(name.lexeme, value, false, stmt.attributes.isPublic());
+					if (mu.environment.get(name) == null) {
+						mu.environment.topLevel().define(name, value, false, stmt.attributes.isPublic());
 					} else {
-						val = mu.environment.get(name.lexeme);
+						val = mu.environment.get(name);
 					}
 				}
 			}
 			if (stmt.attributes.isProp()) {
-				mu.environment.topLevel().define(name.lexeme,
-						new Result(new Property(false, name.lexeme, value), value.type), false, true);
+				mu.environment.topLevel().define(name, new Result(new Property(stmt.line, false, name, value), value.type), false, true);
 			} else {
-				mu.environment.define(name.lexeme, value, false, stmt.attributes.isPublic());
+				mu.environment.define(name, value, false, stmt.attributes.isPublic());
 			}
 		}
 		return val;
@@ -170,28 +171,56 @@ public class Visitors implements Expr.Visitor {
 
 	@Override
 	public Result visitTemplateDef(Expr.TemplateDef stmt) {
-		Template tmpl = new Template(stmt, mu.environment.capture(stmt.name.lexeme));
-		Result res = mu.environment.topLevel().define(stmt.name.lexeme, new Result(tmpl, new Type.SignatureType(stmt)),
+		Template tmpl = new Template(stmt, mu.environment.capture(stmt.name));
+		Result res = mu.environment.topLevel().define(stmt.name, new Result(tmpl, new Type.SignatureType(stmt)),
 				false, true);
-		tmpl.closure.define(stmt.name.lexeme, new Result(tmpl, new Type.SignatureType(stmt)), false, true);
+		tmpl.closure.define(stmt.name, new Result(tmpl, new Type.SignatureType(stmt)), false, true);
 
 		if(stmt.attributes.containsKey("jvm")) {
 			if(stmt.kind.equals("class")) {
-				// if class: get all subclasses, methods, ...
 				JavaHelper.evalClass(mu, tmpl);
 			}
 			return res;
 		}
-		
+
+		if(stmt.attributes.containsKey("op")) {
+			if(stmt.kind.equals("fun")) {
+				String op = (String) stmt.attributes.get("op");
+				Type type = Type.evaluate(tmpl.params.types().get(0), mu.environment);
+				Signature sig = new Signature(tmpl.def);
+				Map<Signature, Object> intface = type.interfaces();
+				intface.put(sig, tmpl);
+				Type.interfaces.put(type.name, intface);
+				if(tmpl.params.toMap().size() == 2) {
+					mu.ops.makeOperator(sig, op);
+				} else {
+					if(tmpl.params.listMap.get(0).id.equals("left"))
+						mu.postfixOps.makeOperator(sig, op);
+					if(tmpl.params.listMap.get(0).id.equals("right"))
+						mu.prefixOps.makeOperator(sig, op);
+				}
+			}
+		}
+
 		// define all declarations inside templatedef interface
 		for (Expr expr : tmpl.body.expressions) {
 
+			/* non-local templdefs */
+			if (expr instanceof Expr.TemplateDef) {
+				Expr.TemplateDef def = (Expr.TemplateDef) expr;
+				if (def.attributes.isPublic()) {
+					List<Expr> list = new ArrayList<>();
+					list.add(expr);
+					Result result = mu.executeBlockReturn(list, tmpl.closure);
+					tmpl.closure.define(def.name, result, false, true);
+				}
+			}
+			
 			/* non-local typedefs */
 			if (expr instanceof Expr.TypeDef) {
 				TypeDef def = (TypeDef) expr;
 				if (def.attributes.isPublic()) {
-					// CHECKME
-					tmpl.closure.define(def.name.lexeme, new Result(def.literal, Type.Type), false, true);
+					tmpl.closure.define(def.name, new Result(def.literal, Type.Type), false, true);
 					// define SetEnum or ListEnum literals
 					if (def.type instanceof Type.ListEnum) {
 						for (Object val : ((Type.ListEnum) def.type).values) {
@@ -210,9 +239,9 @@ public class Visitors implements Expr.Visitor {
 			if (expr instanceof Expr.Val) {
 				Val def = (Val) expr;
 				if (def.attributes.isOwn()) {
-					for (Token name : def.names) {
-						if (tmpl.closure.get(name.lexeme) != null) {
-							throw new InterpreterError("Name %s already defined.", name.lexeme);
+					for (String name : def.names) {
+						if (tmpl.closure.get(name) != null) {
+							throw new InterpreterError("Name %s already defined.", name);
 
 						}
 					}
@@ -227,9 +256,9 @@ public class Visitors implements Expr.Visitor {
 				Var def = (Var) expr;
 				// getter & setter
 				if (def.attributes.isOwn()) {
-					for (Token name : def.names) {
-						if (tmpl.closure.get(name.lexeme) != null) {
-							throw new InterpreterError("Name %s already defined.", name.lexeme);
+					for (String name : def.names) {
+						if (tmpl.closure.get(name) != null) {
+							throw new InterpreterError("Name %s already defined.", name);
 						}
 					}
 					List<Expr> list = new ArrayList<>();
@@ -246,7 +275,7 @@ public class Visitors implements Expr.Visitor {
 		Result callable = mu.evaluate(stmt.callable);
 		if (callable.value instanceof Template) {
 			Template tmpl = (Template) callable.value;
-			switch (stmt.name.lexeme.toLowerCase()) {
+			switch (stmt.name.toLowerCase()) {
 			case "around":
 				if (tmpl.around != null) {
 					System.err.println("Overwriting existing around block...");
@@ -384,7 +413,7 @@ public class Visitors implements Expr.Visitor {
 			@SuppressWarnings("unchecked")
 			String path = (String) ((ListMap<Object>) mu.environment.get("system").value).get("currentFile");
 			if (path != null) {
-				File f = new File(path + ".json");
+				File f = new File(path + ".deps");
 				ObjectMapper mapper = new ObjectMapper();
 				mapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE);
 				mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
@@ -402,7 +431,7 @@ public class Visitors implements Expr.Visitor {
 			@SuppressWarnings("unchecked")
 			String path = (String) ((ListMap<Object>) mu.environment.get("system").value).get("currentFile");
 			if (path != null) {
-				File f = new File(path + ".json");
+				File f = new File(path + ".deps");
 				ObjectMapper mapper = new ObjectMapper();
 				mapper.setVisibility(PropertyAccessor.ALL, Visibility.NONE);
 				mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
@@ -417,7 +446,7 @@ public class Visitors implements Expr.Visitor {
 	@Override
 	public Result visitTypeDefExpr(Expr.TypeDef expr) {
 		if (expr.name != null) {
-			mu.environment.define(expr.name.lexeme, new Result(expr.literal, Type.Type), false,
+			mu.environment.define(expr.name, new Result(expr.literal, Type.Type), false,
 					expr.attributes.isPublic());
 
 			if (expr.literal instanceof Type.ListEnum) {
@@ -470,15 +499,27 @@ public class Visitors implements Expr.Visitor {
 
 	@Override
 	public Result visitBinaryExpr(Expr.Binary expr) {
-		Result left = mu.evaluate(expr.left);
-		expr.type = left.type;
-
+		Result leftOrg = mu.evaluate(expr.left);
+		if (leftOrg.value instanceof UnitValue) {
+			leftOrg.type = Type.Unit;
+			((UnitValue) leftOrg.value).resolve();
+		}
+		Result left = leftOrg;
+		if(left.type instanceof UnionType || left.type instanceof IntersectionType) {
+			left.type = Interpreter.typeFromValue(left.value);
+		}
+		
+		Signature sig = mu.ops.getFunction(expr.operator, left.type);
+		if(!sig.paramTypes.get(0).matches(left.type)) {
+			left = convert(leftOrg, sig.paramTypes.get(0));
+		}
+			
 		/* START short circuit */
-		switch (mu.soperator(expr.operator.type)) {
-		case AND:
+		switch (expr.operator) {
+		case "&":
 			/* String concatenation and logical AND */
 			if (left.value instanceof String || left.value instanceof BigInteger) {
-				return mu.invoke("and", left, mu.evaluate(expr.right), expr.type);
+				break;
 			}
 			/* Short circuit AND */
 			if (mu.isTruthy(null, expr.left, false)) {
@@ -486,10 +527,10 @@ public class Visitors implements Expr.Visitor {
 			} else {
 				return left;
 			}
-		case OR:
+		case "|":
 			/* Logical OR */
 			if (left.value instanceof BigInteger) {
-				return mu.invoke("or", left, mu.evaluate(expr.right), expr.type);
+				break;
 			}
 			/* Short circuit OR */
 			if (mu.isTruthy(null, expr.left, false)) {
@@ -502,133 +543,116 @@ public class Visitors implements Expr.Visitor {
 		}
 		/* END short circuit */
 
-		Result right = mu.evaluate(expr.right);
-
-		if (mu.keyword(expr.operator.type) == Keyword.XOR) {
-			return mu.invoke("xor", left, right, expr.type);
+		Result rightOrg = mu.evaluate(expr.right);
+		if (rightOrg.value instanceof UnitValue) {
+			rightOrg.type = Type.Unit;
+			((UnitValue) rightOrg.value).resolve();
 		}
-		if (mu.keyword(expr.operator.type) == Keyword.IN) {
-			// express unit of measurement in other scale
-			return mu.invoke("in", left, right, Type.Real);
-		}
-		if (mu.keyword(expr.operator.type) == Keyword.AS) {
-			// TODO: typecast
-			return mu.invoke("cast", left, right, right.type);
-		}
+		Result right = rightOrg;
 
-		switch (mu.soperator(expr.operator.type)) {
-
-		case GREATER:
-			return mu.invoke("gt", left, right, Type.Bool);
-
-		case GREATER_EQUAL:
-			return mu.invoke("ge", left, right, Type.Bool);
-
-		case LESS:
-			return mu.invoke("lt", left, right, Type.Bool);
-
-		case LESS_EQUAL:
-			return mu.invoke("le", left, right, Type.Bool);
-
-		case NOT_EQUAL:
-			return mu.invoke("neq", left, right, Type.Bool);
-
-		case NEQEQ:
-			return mu.invoke("neqeq", left, right, Type.Bool);
-
-		case EQUAL:
-			return mu.invoke("eq", left, right, Type.Bool);
-
-		case EQEQ:
-			return mu.invoke("eqeq", left, right, Type.Bool);
-
-		case MINUS:
-			return mu.invoke("minus", left, right, expr.type);
-
-		case SLASH:
-			return mu.invoke("div", left, right, expr.type);
-
-		case PERCENT:
-			return mu.invoke("rem", left, right, expr.type);
-
-		case STAR:
-			return mu.invoke("mul", left, right, expr.type);
-
-		case PLUS:
-			return mu.invoke("plus", left, right, expr.type);
-
-		case POW:
-			if (expr.type.equals(Type.Bool)) {
-				return mu.invoke("xor", left, right, Type.Bool);
+		if(expr.operator.equals("as")) {
+			/* casting operator */
+			// expr AS type
+			Type target = (Type)right.value;
+			if(!leftOrg.type.equals(target)) {
+				left = convert(leftOrg, target);
+				return left;
+			} else {
+				return new Result(left.value, target);
 			}
-			return mu.invoke("pow", left, right, expr.type);
-
-		case LEFTSHIFT:
-			return mu.invoke("lsh", left, right, expr.type);
-
-		case RIGHTSHIFT:
-			return mu.invoke("rsh", left, right, expr.type);
-
-		default:
-			return new Result(null, Type.Void);
 		}
+
+		sig = mu.ops.getFunction(expr.operator, left.type, right.type);
+		try {
+			if(!sig.paramTypes.get(1).matches(right.type)) {
+				right = convert(rightOrg, sig.paramTypes.get(1));
+			}
+		} catch(MuException e) {
+			// turn order around
+			sig = mu.ops.getFunction(expr.operator, rightOrg.type, leftOrg.type);
+			if(!sig.paramTypes.get(0).matches(leftOrg.type)) {
+				left = convert(leftOrg, sig.paramTypes.get(0));
+			}
+			if(!sig.paramTypes.get(1).matches(rightOrg.type)) {
+				right = convert(rightOrg, sig.paramTypes.get(1));
+			}
+			return mu.invoke(sig.name, left, right, sig);
+		}
+		return mu.invoke(sig.name, left, right, sig);
+	}
+
+	private Result convert(Result res, Type t) {
+		Signature sig = new Signature("to" + t, t, res.type);
+		Object func = res.type.lookup("to" + t, sig);
+		if (func != null && func instanceof Method) {
+			try {
+				Object val = ((Method)func).invoke(null, res.value);
+				return new Result(val, t);
+			} catch (Exception e) {
+				//return res;
+			}
+		}
+		if (func != null && func instanceof TemplateDef) {
+			TemplateDef def = (TemplateDef)func;
+			func = new Template(def, mu.environment.capture(def.name));
+		}
+		if (func != null && func instanceof Template) {
+			try {
+				Template tmpl = (Template)func;
+				List<Expr> exprs = new ArrayList<>();
+				exprs.add(new Expr.Literal(mu.currentLine, res.value));
+				Expr.Map args = new Expr.Map(mu.currentLine, exprs);
+				return Template.call(tmpl, mu, args);
+			} catch (Exception e) {
+				//return res;
+			}
+		}
+		throw new MuException("Cannot convert %s to %s", res.type, t);
 	}
 
 	@Override
 	public Result visitUnaryExpr(Expr.Unary expr) {
 		Result right = mu.evaluate(expr.right);
-		expr.type = right.type;
 
-		switch (mu.soperator(expr.operator.type)) {
+		if (right.value instanceof UnitValue) {
+			right.type = Type.Unit;
+			((UnitValue) right.value).resolve();
+		}
+		if(right.type instanceof UnionType || right.type instanceof IntersectionType) {
+			right.type = Interpreter.typeFromValue(right.value);
+		}
 
-		case MINUS:
-			return mu.invoke("neg", expr.type, right);
+		Signature sig = mu.prefixOps.getFunction(expr.operator, right.type);
 
-		case PLUS:
-			return right;
+		switch (expr.operator) {
 
-		case NOT:
-			return mu.invoke("not", expr.type, right);
-
-		case PLUSPLUS:
-			Result result = mu.invoke("inc", expr.type, right);
+		case "++":
+			Result result = mu.invoke(sig.name, sig, right);
 			mu.assign(((Expr.Variable) expr.right), result);
 			return result;
 
-		case MINMIN:
-			result = mu.invoke("dec", expr.type, right);
+		case "--":
+			result = mu.invoke(sig.name, sig, right);
 			mu.assign(((Expr.Variable) expr.right), result);
 			return result;
 
-		case BACKSLASH:
-			return mu.invoke("abs", expr.type, right);
-
-		case ATSIGN:
+		case "@":
 			Type refType = null;
 			if (right.type instanceof RefType) {
 				refType = right.type;
 			} else {
 				refType = new RefType(right.type);
 			}
-			return mu.invoke("ref", refType, new Result(right.value, refType));
+			return mu.invoke(sig.name, sig, new Result(right.value, refType));
 
-		case UPARROW:
-			return mu.invoke("deref", new RefType(Type.Any), right);
-
-		case STAR:
+		case "↑":
+			return mu.invoke(sig.name, sig, right);
+			
+		case "*":
 			return mu.evaluate(expr.right);
 
 		default:
-			break;
-		}
-
-		switch (mu.keyword(expr.operator.type)) {
-		case ABS:
-			return mu.invoke("abs", expr.type, right);
-		case SQRT:
-			return mu.invoke("sqrt", expr.type, right);
-		default:
-			return new Result(null, Type.Void);
+			return mu.invoke(sig.name, sig, right);
 		}
 	}
 
@@ -636,25 +660,29 @@ public class Visitors implements Expr.Visitor {
 	public Result visitPostfixExpr(Expr.Postfix expr) {
 
 		Result left = mu.evaluate(expr.left);
-		expr.type = left.type;
+		if (left.value instanceof UnitValue) {
+			left.type = Type.Unit;
+			((UnitValue) left.value).resolve();
+		}
+		if(left.type instanceof UnionType || left.type instanceof IntersectionType) {
+			left.type = Interpreter.typeFromValue(left.value);
+		}
+		Signature sig = mu.postfixOps.getFunction(expr.operator, left.type);
 
-		switch (mu.soperator(expr.operator.type)) {
+		switch (expr.operator) {
 
-		case PLUSPLUS:
-			Result result = mu.invoke("inc", expr.type, left);
+		case "++":
+			Result result = mu.invoke(sig.name, sig, left);
 			mu.assign(((Expr.Variable) expr.left), result);
 			return left;
 
-		case MINMIN:
-			result = mu.invoke("dec", expr.type, left);
+		case "--":
+			result = mu.invoke(sig.name, sig, left);
 			mu.assign(((Expr.Variable) expr.left), result);
 			return left;
-
-		case BANG:
-			return mu.invoke("fac", expr.type, left);
 
 		default:
-			return new Result(null, Type.Void);
+			return mu.invoke(sig.name, sig, left);
 		}
 	}
 
@@ -817,6 +845,9 @@ public class Visitors implements Expr.Visitor {
 	@Override
 	public Result visitVariableExpr(Expr.Variable expr) {
 		Result res = mu.environment.get(expr.name);
+		if(res == null) {
+			throw new MuException("Undefined varaiable '%s'", expr.name );
+		}
 		if (res.value instanceof Property) {
 			/* it's a getter */
 			return mu.callGetter((Property) res.value);
@@ -827,58 +858,55 @@ public class Visitors implements Expr.Visitor {
 	@Override
 	public Result visitAssignExpr(Assign expr) {
 
-		Result left = mu.environment.get(expr.var.get(0).lexeme);
-		if (left == null) {
+		Result leftOrg = mu.environment.get(expr.var.get(0));
+		if (leftOrg == null) {
 			throw new InterpreterError("Undefined variable %s", expr.var.get(0));
 		}
-		expr.type = left.type;
-		Result right = mu.evaluate(expr.value);
+		Result left = leftOrg;
+		Result rightOrg = mu.evaluate(expr.value);
+		Result right = rightOrg;
+		
 		Result value = right;
-
-		switch (mu.soperator(expr.op.type)) {
-		case ASSIGN:
-			break;
-		case PLUSIS:
-			value = mu.invoke("plus", left, right, expr.type);
-			break;
-		case MINIS:
-			value = mu.invoke("minus", left, right, expr.type);
-			break;
-		case STARIS:
-			value = mu.invoke("mul", left, right, expr.type);
-			break;
-		case SLASHIS:
-			value = mu.invoke("div", left, right, expr.type);
-			break;
-		case PERCENTIS:
-			value = mu.invoke("rem", left, right, expr.type);
-			break;
-		case POWIS:
-			if (expr.type.equals(Type.Bool)) {
-				value = mu.invoke("xor", left, right, expr.type);
-			} else {
-				value = mu.invoke("pow", left, right, expr.type);
+		// op= 
+		if(!expr.op.type.equals(Soperator.ASSIGN)) {
+			if (left.value instanceof UnitValue) {
+				left.type = Type.Unit;
+				((UnitValue) left.value).resolve();
 			}
-			break;
-		case ANDIS:
-			value = mu.invoke("and", left, right, expr.type);
-			break;
-		case ORIS:
-			value = mu.invoke("or", left, right, expr.type);
-			break;
-		case LSHIFTIS:
-			value = mu.invoke("lsh", left, right, expr.type);
-			break;
-		case RSHIFTIS:
-			value = mu.invoke("rsh", left, right, expr.type);
-			break;
-		default:
-			break;
-		}
+			if(left.type instanceof UnionType || left.type instanceof IntersectionType) {
+				left.type = Interpreter.typeFromValue(left.value);
+			}
+			if (right.value instanceof UnitValue) {
+				right.type = Type.Unit;
+				((UnitValue) right.value).resolve();
+			}
+			if(right.type instanceof UnionType || right.type instanceof IntersectionType) {
+				right.type = Interpreter.typeFromValue(right.value);
+			}
+			
+			String operator = expr.op.lexeme.substring(0, expr.op.lexeme.length() - 1);
+			Signature sig = mu.ops.getFunction(operator, left.type, right.type);
+			try {
+				if(!sig.paramTypes.get(1).matches(right.type)) {
+					right = convert(rightOrg, sig.paramTypes.get(1));
+				}
+			} catch(MuException e) {
+				// turn order around
+				sig = mu.ops.getFunction(operator, rightOrg.type, leftOrg.type);
+				if(!sig.paramTypes.get(0).matches(leftOrg.type)) {
+					left = convert(leftOrg, sig.paramTypes.get(0));
+				}
+				if(!sig.paramTypes.get(1).matches(rightOrg.type)) {
+					right = convert(rightOrg, sig.paramTypes.get(1));
+				}
+				value = mu.invoke(sig.name, left, right, sig);
+			}
+			value = mu.invoke(sig.name, left, right, sig);
+		}		
 		mu.assign(expr, value);
 		return value;
 	}
-
+	
 	@Override
 	public Result visitBlockExpr(Expr.Block expr) {
 		return mu.executeBlock(expr.expressions, new Environment("block", mu.environment));
@@ -899,6 +927,9 @@ public class Visitors implements Expr.Visitor {
 	@Override
 	public Result visitSelectExpr(Expr.Select stmt) {
 		Result zwitch = mu.evaluate(stmt.condition);
+		if(stmt.whenExpressions.size() != stmt.whenBranches.size() ) {
+			throw new InterpreterError("Bad select statement");
+		}
 		for (Pair<Expr, Expr> when : Interpreter.zip(stmt.whenExpressions, stmt.whenBranches)) {
 			if (mu.evaluate(when.left).equals(zwitch)) {
 				return mu.evaluate(when.right);
@@ -972,7 +1003,7 @@ public class Visitors implements Expr.Visitor {
 			type = new Type.MapType(Type.Any);
 		}
 		Object firstValue = values.iterator().next();
-		env.define(expr.var.names.get(0).lexeme, new Result(firstValue, Interpreter.typeFromValue(firstValue)), true,
+		env.define(expr.var.names.get(0), new Result(firstValue, Interpreter.typeFromValue(firstValue)), true,
 				false);
 
 		List<Object> list = new ArrayList<>();
@@ -1044,7 +1075,7 @@ public class Visitors implements Expr.Visitor {
 		if (expr.safe && res.value == null) {
 			return res;
 		}
-		String key = ((Expr.Variable) expr.next).name.lexeme;
+		String key = ((Expr.Variable) expr.next).name;
 
 		try {
 			Result ret = null;
@@ -1110,11 +1141,8 @@ public class Visitors implements Expr.Visitor {
 			}
 			break;
 		case "values":
-			if (res.value instanceof ListEnum) {
+			if (res.value instanceof EnumType) {
 				return new Result(((ListEnum) res.value).values, new ListType(Type.Any));
-			}
-			if (res.value instanceof SetEnum) {
-				return new Result(((SetEnum) res.value).values, new SetType(Type.Any));
 			}
 			break;
 		case "eltType":
@@ -1228,7 +1256,7 @@ public class Visitors implements Expr.Visitor {
 
 	@Override
 	public Result visitUnitDefExpr(UnitDefExpr expr) {
-		String category = expr.name.lexeme;
+		String category = expr.name;
 		String unit = expr.unit;
 		double offset = 0.0;
 		double factor = 1.0;

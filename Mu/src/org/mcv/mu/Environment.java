@@ -118,6 +118,11 @@ class Environment {
 		current = Type.evaluate(current, this);
 		newType = Type.evaluate(newType, this);
 		if (!current.matches(newType)) {
+			if(current instanceof Type.EnumType) {
+				if(((Type.EnumType)current).valueMatches(newValue)) {
+					return current;
+				}
+			}
 			throw new InterpreterError("Type of variable %s (%s) does not match value %s", name, current, newValue);
 		}
 		return current;
@@ -169,5 +174,4 @@ class Environment {
 	public void undefine(String key) {
 		values.remove(key);
 	}
-
 }

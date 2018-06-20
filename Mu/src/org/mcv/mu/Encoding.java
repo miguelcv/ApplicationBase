@@ -1,10 +1,10 @@
 package org.mcv.mu;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-
-import nl.novadoc.utils.FileUtils;
 
 public class Encoding {
 
@@ -13,23 +13,27 @@ public class Encoding {
 	static Map<String, Integer> latexEscapes = new LinkedHashMap<>();
 
 	static {
-		File f = new File("UniData.txt");
-		String[] lines = FileUtils.readLines(f);
-		for (String line : lines) {
-			String[] vk = line.split(": ");
-			String[] keys = vk[1].split(",");
-			for(String key : keys) {
-				unicodeNames.put(key, fromHex(vk[0]));
-				unicode.put(fromHex(vk[0]), keys[0]);
+		try {
+			File f = new File("UniData.txt");
+			List<String> lines = Files.readAllLines(f.toPath());
+			for (String line : lines) {
+				String[] vk = line.split(": ");
+				String[] keys = vk[1].split(",");
+				for (String key : keys) {
+					unicodeNames.put(key, fromHex(vk[0]));
+					unicode.put(fromHex(vk[0]), keys[0]);
+				}
 			}
-		}
-		f = new File("LaTeX.txt");
-		lines = FileUtils.readLines(f);
-		for (String line : lines) {
-			String[] vk = line.split(": ");
-			String key = vk[0];
-			String val = vk[1];
-			latexEscapes.put(key, val.codePointAt(0));
+			f = new File("LaTeX.txt");
+			lines = Files.readAllLines(f.toPath());
+			for (String line : lines) {
+				String[] vk = line.split(": ");
+				String key = vk[0];
+				String val = vk[1];
+				latexEscapes.put(key, val.codePointAt(0));
+			}
+		} catch (Exception e) {
+			throw new Scanner.ScannerError("Error initializing Mu");
 		}
 	}
 

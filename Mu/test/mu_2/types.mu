@@ -1,10 +1,11 @@
-/*
 // type alias
 type Double: Real
 
 var x: Double
+
 x := 6.9
 print x
+
 print x.type
 
 // list type
@@ -32,10 +33,10 @@ print smap
 
 // ref type
 type IntPtr: ref(Int)
-//var i: 0
-//var ip := &i
-//print ip
-//print *ip
+var i: 0
+var ip: @i
+print ip
+print ↑ip
  
 // fun type
 type Predicate: fun(Any) => Bool
@@ -61,7 +62,6 @@ var s: NullableString
 s := nil
 s := "hi"
 print s
-*/
 
 type Lowercase: enum['a'..'z']
 var lc: Lowercase

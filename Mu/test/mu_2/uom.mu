@@ -8,11 +8,9 @@ siunit Memory: "B" [0, 8]
 var x: 3_MB * 6
 print x in "b"
 
-// NEG INC DEC ABS
+// NEG ABS
 var value: 5_km/h
 print -value
-print ++value
-print --value
 print \value\
 		
 // PLUS MINUS: units must match

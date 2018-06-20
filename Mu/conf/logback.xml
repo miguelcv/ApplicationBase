@@ -20,15 +20,15 @@
 	  	</encoder>
 	</appender>
 
-	<logger name="nl.novadoc" additivity="false">
+	<logger name="org.mcv" additivity="false">
 		<level value="debug" />
 		<appender-ref ref="console" />
 		<appender-ref ref="file" />
 	</logger>
 
 	<root>
-		<level value="NONE" additivity="false"/>
-		<!-- appender-ref ref="console" /-->
+		<level value="ERROR" additivity="false"/>
+		<appender-ref ref="console" />
 		<appender-ref ref="file" />
 	</root>
 		

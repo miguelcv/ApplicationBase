@@ -40,6 +40,10 @@ public class IRef extends IType {
 		return new Pointer(a);
 	}
 
+	public static Pointer id(Pointer a) {
+		return a;
+	}
+
 	public static Object deref(Pointer a) {
 		return a.getRef();
 	}

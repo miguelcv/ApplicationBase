@@ -66,6 +66,10 @@ public class IBool extends IType {
 		return a ? b : a;
 	}
 
+	public static Boolean id(Boolean a) {
+		return a;
+	}
+
 	public static String toString(Boolean a) {
 		return String.valueOf(a);
 	}

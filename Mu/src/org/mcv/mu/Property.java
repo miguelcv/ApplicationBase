@@ -5,13 +5,12 @@ import java.util.List;
 
 public class Property {
 	
-	Token valueToken = new Token(Soperator.ID, "$value", "$value", -1);
-	Token newToken = new Token(Soperator.ID, "$new", "$new", -1);
-	Token opToken = new Token(Soperator.ASSIGN, ":=", ":=", -1);
+	int line;
 	
-	public Property(boolean mutable, String name, Result var) {
+	public Property(int line, boolean mutable, String name, Result var) {
 		this.var = var;
 		this.name = name;
+		this.line = line;
 		get = mkGetter();
 		if(mutable) {
 			set = mkSetter();
@@ -24,16 +23,15 @@ public class Property {
 	Expr.Block set;
 	
 	Expr.Block mkGetter() {
-		Token nameToken = new Token(Soperator.ID, name, name, -1);
 		List<Expr> expressions = new ArrayList<>();
-		expressions.add(new Expr.Variable(valueToken));
-		return new Expr.Block(nameToken, expressions);
+		expressions.add(new Expr.Variable("$value", line));
+		return new Expr.Block(line, expressions);
 	}
 
 	Expr.Block mkSetter() {
-		Token nameToken = new Token(Soperator.ID, name, name, -1);
 		List<Expr> expressions = new ArrayList<>();
-		expressions.add(new Expr.Assign(valueToken, new Expr.Variable(newToken), opToken));
-		return new Expr.Block(nameToken, expressions);
+		Token opToken = new Token(Soperator.ASSIGN, ":=", ":=", line);
+		expressions.add(new Expr.Assign("$value", line, new Expr.Variable("$new", line), opToken));
+		return new Expr.Block(line, expressions);
 	}
 }

@@ -46,6 +46,10 @@ public class IString extends IType {
 		return a.compareTo(b) < 0 ? a : b;		
 	}
 
+	public static String id(String a) {
+		return a;		
+	}
+
 	public static String toString(String a) {
 		return String.valueOf(a);
 	}

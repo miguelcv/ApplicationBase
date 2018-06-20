@@ -18,7 +18,7 @@ public class Signature {
 	List<Type> paramTypes = new ArrayList<>();
 	
 	public Signature(TemplateDef def) {
-		name = def.name.lexeme;
+		name = def.name;
 		returnType = def.returnType;
 		paramTypes = new ArrayList<>();
 		for(Entry<String, ParamFormal> entry : def.params.listMap.entrySet()) {
@@ -44,6 +44,15 @@ public class Signature {
 		}		
 	}
 
+	public Signature(Signature tmpl) {
+		this.name = tmpl.name;
+		this.returnType = tmpl.returnType;
+		this.paramTypes = new ArrayList<>();
+		for(Type type : tmpl.paramTypes) {
+			this.paramTypes.add(type);
+		}
+	}
+
 	static Type typeFromClass(Class<?> clz) {
 		/* We have char, string, int, real, bool */
 		if (clz.equals(Void.class))
@@ -61,7 +70,7 @@ public class Signature {
 		if (clz.equals(BigInteger.class))
 			return Type.Int;
 		if (clz.equals(UnitValue.class))
-			return Type.Real;
+			return Type.Unit;
 		if (clz.equals(MuException.class))
 			return Type.Exception;
 		if (clz.equals(Double.class) || clz.equals(double.class))
@@ -92,6 +101,7 @@ public class Signature {
 			Signature other = (Signature)o;
 			if(name != null && !name.equals(other.name)) return false;
 			if(returnType != null && !returnType.equals(other.returnType)) return false;
+			if(this.paramTypes.size() != other.paramTypes.size()) return false;
 			try {
 				for (Pair<Type, Type> types : Interpreter.zip(this.paramTypes, other.paramTypes)) {
 					if(types.left != null && !types.left.equals(types.right)) {
@@ -135,9 +145,12 @@ public class Signature {
 		for(Type type : paramTypes) {
 			if(type != null) {
 				sb.append(type.name).append(",");
-			}			
+			}
 		}
-		sb.deleteCharAt(sb.length()-1);
+		if(paramTypes.size() > 0) {
+			// delete comma
+			sb.deleteCharAt(sb.length()-1);
+		}
 		sb.append(")");
 		return sb.toString();
 	}

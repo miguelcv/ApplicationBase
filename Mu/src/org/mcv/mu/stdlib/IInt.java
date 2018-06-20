@@ -1,5 +1,6 @@
 package org.mcv.mu.stdlib;
 
+import org.mcv.math.BigDecimal;
 import org.mcv.math.BigInteger;
 import org.mcv.uom.Bag;
 import org.mcv.uom.Unit;
@@ -112,6 +113,10 @@ public class IInt extends IType {
 		return a.pow(b);
 	}
 
+	public static BigInteger pow(BigInteger a, Double b) {
+		return BigDecimal.valueOf(Math.pow(a.doubleValue(), b)).toBigInteger();
+	}
+
 	public static BigInteger sqrt(BigInteger a) {
 		return a.sqrt();
 	}
@@ -167,6 +172,10 @@ public class IInt extends IType {
 		return a.min(b);
 	}
 
+	public static BigInteger id(BigInteger a) {
+		return a;
+	}
+	
 	public static String toString(BigInteger a) {
 		return String.valueOf(a);
 	}

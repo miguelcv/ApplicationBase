@@ -40,9 +40,8 @@ public class Template {
 	Template(String name, Environment env) {
 		params = new Params(true);
 		params.add(new ParamFormal("*", Type.Any, null, null, new Attributes()));
-		Token tok = new Token(Keyword.FUN, "main", "main", 0);
-		body = new Block(tok, new ArrayList<>());
-		def = new TemplateDef(tok, "fun", params, Type.Void, body, attributes);
+		body = new Block(-1, new ArrayList<>());
+		def = new TemplateDef("main", 0, "fun", params, Type.Void, body, attributes);
 		kind = "fun";
 		this.name = name;
 		returnType = Type.Void;
@@ -54,7 +53,7 @@ public class Template {
 		this.kind = stmt.kind;
 		this.attributes = stmt.attributes;
 		this.body = stmt.body;
-		this.name = stmt.name.lexeme;
+		this.name = stmt.name;
 		this.params = stmt.params;
 		this.returnType = stmt.type;
 		this.closure = closure;

@@ -129,14 +129,6 @@ public class IUnit {
 		return new UnitValue(-a.value, a.units); 
 	}
 
-	public static UnitValue inc(UnitValue a) {
-		return new UnitValue(a.value+1, a.units); 
-	}
-	
-	public static UnitValue dec(UnitValue a) {
-		return new UnitValue(a.value-1, a.units); 
-	}
-
 	// MULT/DIV
 	public static UnitValue mul(UnitValue a, UnitValue b) {
 		a = a.expand();
@@ -296,7 +288,11 @@ public class IUnit {
 	public static UnitValue abs(UnitValue a) {
 		return new UnitValue(Math.abs(a.value),a.units);
 	}
-	
+
+	public static UnitValue id(UnitValue a) {
+		return a;
+	}
+
 	public static String toString(UnitValue a) {
 		return a.toString();
 	}

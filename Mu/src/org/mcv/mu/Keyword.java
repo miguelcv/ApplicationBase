@@ -3,7 +3,7 @@ package org.mcv.mu;
 public enum Keyword implements TokenType {
 	NONE,
 	IMPORT, FROM, AS, WHERE,
-	TYPE, CLASS, OPERATOR,
+	TYPE, CLASS, 
 	UNIT, SIUNIT,
 	FUN,
 	RETURN,
@@ -18,7 +18,7 @@ public enum Keyword implements TokenType {
 	BREAK, CONTINUE,
 	FALSE, TRUE, NIL,
 	SQRT, ABS, XOR,
-	MOD, REM, INF, NAN,
+	INF, NAN,
 	// type operators
 	REF, LIST, SET, MAP, ENUM
 }

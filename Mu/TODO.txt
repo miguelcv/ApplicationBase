@@ -1,14 +1,7 @@
-* imports, using Git!!
-	import "path/to/file[.mu]" from "git-repo[:commit]" [where (map)]
-	config: git-repo-roots
-	thisname.mu.deps => dep name hash
-* AS cast
-* native operator definition, non ad-hoc operator mapping
+* threads, await, async
 
 * BUG: line off-by-one (or more)
 * BUG: comments and indentation?
-
-* threads, await, async (Actors?)
 
 STDLIB:
 * date/time, regex

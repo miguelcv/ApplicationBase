@@ -14,5 +14,7 @@ public enum Attribute implements TokenType {
 	/* doc comment */
 	DOC,
 	/* thunk */
-	THUNK
+	THUNK,
+	/* operator */
+	OP
 }

@@ -23,7 +23,7 @@ print "<{1234567890}This is not a raw string.{1234567890}"
 // no interpolation
 print "<{EOS}This is #{a} raw string.{EOS}"
 
-// no charescapes
+// no char escapes
 print "<{EOS}This @{NL} is a raw string.{EOS}"
 
 // interpolation

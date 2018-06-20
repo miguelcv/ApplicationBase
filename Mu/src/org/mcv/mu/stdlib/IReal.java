@@ -1,5 +1,6 @@
 package org.mcv.mu.stdlib;
 
+import org.mcv.math.BigInteger;
 import org.mcv.uom.Bag;
 import org.mcv.uom.Unit;
 import org.mcv.uom.UnitValue;
@@ -74,6 +75,10 @@ public class IReal extends IType {
 		return Math.pow(a, b);
 	}
 
+	public static Double pow(Double a, BigInteger b) {
+		return Math.pow(a, b.doubleValue());
+	}
+
 	public static Double abs(Double a) {
 		return Math.abs(a);
 	}
@@ -89,7 +94,11 @@ public class IReal extends IType {
 	public static Double sqrt(Double a) {
 		return Math.sqrt(a);
 	}
-	
+
+	public static Double id(Double a) {
+		return a;
+	}
+
 	public static String toString(Double a) {
 		return String.valueOf(a);
 	}

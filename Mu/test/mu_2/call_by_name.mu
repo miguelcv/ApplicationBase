@@ -20,7 +20,6 @@ cbn(sqrt i)
 // Inf and NaN as Ints
 var q: list(Int)
 var r: Bool
-var ms: String?
 
 var i: Int
 i := -Inf

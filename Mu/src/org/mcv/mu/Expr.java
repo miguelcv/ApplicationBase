@@ -1,6 +1,5 @@
 package org.mcv.mu;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -63,7 +62,7 @@ public abstract class Expr {
 	/* DECLARATIONS */
 
 	public static class TemplateDef extends Expr {
-		TemplateDef(Token name, String kind, Params params, Type returnType, Block body, Attributes attributes) {
+		TemplateDef(String name, int line, String kind, Params params, Type returnType, Block body, Attributes attributes) {
 			this.type = Type.Type;
 			this.kind = kind;
 			this.params = params;
@@ -76,14 +75,14 @@ public abstract class Expr {
 			} else {
 				attributes.put(PUBLIC, true);				
 			}
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitTemplateDef(this);
 		}
 
-		final Token name;
+		final String name;
 		String kind;
 		Params params;
 		Type returnType;
@@ -91,13 +90,13 @@ public abstract class Expr {
 		Attributes attributes = new Attributes();
 		@Override
 		public String toString() {
-			return kind + " " + name.lexeme + params.types() + " => " + returnType;
+			return kind + " " + name + params.types() + " => " + returnType;
 		}
 	}
 
 	public static class UnitDefExpr extends Expr {
 		
-		UnitDefExpr(Token name, boolean si, String unit, String units, Expr offset, Expr factor, Attributes attrs) {
+		UnitDefExpr(String name, int line, boolean si, String unit, String units, Expr offset, Expr factor, Attributes attrs) {
 			this.name = name;
 			this.si = si;
 			this.type = Type.Unit;
@@ -111,14 +110,14 @@ public abstract class Expr {
 			} else {
 				attributes.put(PUBLIC, true);
 			}
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitUnitDefExpr(this);
 		}
 			
-		final Token name;
+		final String name;
 		final String unit;
 		Expr offset;
 		Expr factor;
@@ -134,37 +133,37 @@ public abstract class Expr {
 
 	static class Var extends Expr {
 
-		Var(List<Token> names, Expr initializer, Expr.Map where, Attributes attributes) {
+		Var(List<String> names, int line, Expr initializer, Expr.Map where, Attributes attributes) {
 			this.names.addAll(names);
 			this.initializer = initializer;
 			this.attributes = attributes;
 			this.where = where;
-			this.line = names.get(0).line;
+			this.line = line;
 		}
 		
-		Var(Token name, Expr.Map where, Attributes attributes) {
+		Var(String name, int line, Expr.Map where, Attributes attributes) {
 			// for statement for var i in ...
-			this.initializer = new Expr.Literal(name, 0);
+			this.initializer = new Expr.Literal(line, 0);
 			type = Type.Int;
 			this.names.add(name);
 			this.attributes = attributes;
 			this.where = where;
-			this.line = name.line;			
+			this.line = line;			
 		}
 		
-		Var(Token name, Expr initializer, Expr.Map where, Attributes attributes) {
+		Var(String name, int line, Expr initializer, Expr.Map where, Attributes attributes) {
 			this.names.add(name);
 			this.initializer = initializer;
 			this.attributes = attributes;
 			this.where = where;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitVarDef(this);
 		}
 
-		final List<Token> names = new ArrayList<>();
+		final List<String> names = new ArrayList<>();
 		final Expr initializer;
 		Attributes attributes = new Attributes();
 		Expr.Map where;
@@ -176,28 +175,28 @@ public abstract class Expr {
 
 	static class Val extends Expr {
 		
-		Val(List<Token> names, Expr initializer, Expr.Map where, Attributes attributes) {
+		Val(List<String> names, int line, Expr initializer, Expr.Map where, Attributes attributes) {
 			this.names.addAll(names);
 			this.initializer = initializer;
 			this.attributes = attributes;
 			this.where = where;
-			this.line = names.get(0).line;
+			this.line = line;
 		}
 		
-		Val(Token name, Expr initializer, Map where, Attributes attributes) {
+		Val(String name, int line, Expr initializer, Map where, Attributes attributes) {
 			this.names.add(name);
 			this.initializer = initializer;
 			this.attributes = attributes;
 			this.where = where;
 			this.type = initializer.type;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitValDef(this);
 		}
 
-		final List<Token> names = new ArrayList<>();
+		final List<String> names = new ArrayList<>();
 		final Expr initializer;
 		Expr.Map where;
 		Attributes attributes = new Attributes();
@@ -208,73 +207,73 @@ public abstract class Expr {
 	}
 	
 	static class Aop extends Expr {
-		Aop(Token name, Expr callable, Block block) {
+		Aop(String name, int line, Expr callable, Block block) {
 			this.name = name;
 			this.callable = callable;
 			this.block = block;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitAopExpr(this);
 		}
 
-		final Token name;
+		final String name;
 		final Expr callable;
 		final Block block;
 		@Override
 		public String toString() {
-			return "AOP " + name.lexeme + " " + callable + ":" + block;
+			return "AOP " + name + " " + callable + ":" + block;
 		}
 	}
 
 	static class Getter extends Expr {
-		Getter(Token name, List<Token> ids, Block block) {
+		Getter(String name, int line, List<Token> ids, Block block) {
 			this.name = name;
 			this.variables = ids;
 			this.block = block;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitGetterExpr(this);
 		}
 
-		final Token name;
+		final String name;
 		final List<Token> variables;
 		final Block block;
 		@Override
 		public String toString() {
-			return name.lexeme + " " + variables + ":" + block;
+			return name + " " + variables + ":" + block;
 		}
 	}
 
 	static class Setter extends Expr {
-		Setter(Token name, List<Token> variables, Block block) {
+		Setter(String name, int line, List<Token> variables, Block block) {
 			this.name = name;
 			this.variables = variables;
 			this.block = block;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitSetterExpr(this);
 		}
 
-		final Token name;
+		final String name;
 		final List<Token> variables;
 		final Block block;
 		@Override
 		public String toString() {
-			return name.lexeme + " " + variables + ":" + block;
+			return name + " " + variables + ":" + block;
 		}
 	}
 
 	static class Print extends Expr {
-		Print(Token name, Expr expression) {
+		Print(int line, Expr expression) {
 			this.expression = expression;
 			type = Type.Void;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -289,12 +288,12 @@ public abstract class Expr {
 	}
 
 	static class Assert extends Expr {
-		Assert(Token name, Expr expression, String msg, Set criteria) {
+		Assert(int line, Expr expression, String msg, Set criteria) {
 			this.expression = expression;
 			this.msg = msg;
 			type = Type.Void;
 			this.criteria = criteria;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -311,18 +310,16 @@ public abstract class Expr {
 	}
 
 	static class Return extends Expr {
-		Return(Token keyword, Expr value) {
-			this.keyword = keyword;
+		Return(int line, Expr value) {
 			this.value = value;
 			type = value.type;
-			this.line = keyword.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitReturnExpr(this);
 		}
 
-		final Token keyword;
 		final Expr value;
 		@Override
 		public String toString() {
@@ -331,18 +328,16 @@ public abstract class Expr {
 	}
 
 	static class Throw extends Expr {
-		Throw(Token name, Expr thrown) {
-			this.name = name;
+		Throw(int line, Expr thrown) {
 			this.thrown = thrown;
 			type = thrown.type;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitThrowExpr(this);
 		}
 
-		final Token name;
 		final Expr thrown;
 		@Override
 		public String toString() {
@@ -351,14 +346,14 @@ public abstract class Expr {
 	}
 
 	static class While extends Expr {
-		While(Token name, Expr condition, Expr body, Expr atEnd, Set criteria) {
+		While(String name, int line, Expr condition, Expr body, Expr atEnd, Set criteria) {
 			this.condition = condition;
 			this.body = body;
 			this.criteria = criteria;
 			this.atEnd = atEnd;
 			type = Type.Void;
-			this.line = name.line;
-			if(name.lexeme.equals(Keyword.UNTIL.name())) {
+			this.line = line;
+			if(name.equals(Keyword.UNTIL.name())) {
 				invert = true;
 			} else {
 				invert = false;
@@ -381,12 +376,12 @@ public abstract class Expr {
 	}
 
 	static class For extends Expr {
-		For(Token name, Expr.Var var, Expr range, Block body, Block atEnd) {
+		For(int line, Expr.Var var, Expr range, Block body, Block atEnd) {
 			this.var = var;
 			this.range = range;
 			this.body = body;
 			type = Type.Void;
-			this.line = name.line;
+			this.line = line;
 			this.atEnd = atEnd;
 		}
 
@@ -405,9 +400,9 @@ public abstract class Expr {
 	}
 
 	static class Break extends Expr {
-		Break(Token name) {
+		Break(int line) {
 			type = Type.Void;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -420,9 +415,9 @@ public abstract class Expr {
 	}
 
 	static class Continue extends Expr {
-		Continue(Token name) {
+		Continue(int line) {
 			type = Type.Void;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -435,11 +430,11 @@ public abstract class Expr {
 	}
 
 	static class Seq extends Expr {
-		Seq(Token name, List<Expr> exprs) {
+		Seq(int line, List<Expr> exprs) {
 			this.exprs = exprs;
 			eltType = exprs.isEmpty() ? Type.Any : exprs.get(0).type;
 			type = new Type.ListType(eltType);
-			this.line = name.line;
+			this.line = line;
 		}
 		
 		List<Expr> exprs;
@@ -455,10 +450,10 @@ public abstract class Expr {
 	}
 
 	static class Map extends Expr {
-		Map(Token name, List<Expr> exprs) {
+		Map(int line, List<Expr> exprs) {
 			this.mappings = exprs;
 			type = new Type.MapType(Type.Any);
-			this.line = name.line;
+			this.line = line;
 		}
 		
 		List<Expr> mappings;
@@ -473,11 +468,11 @@ public abstract class Expr {
 	}
 
 	static class Set extends Expr {
-		Set(Token name, java.util.Set<Expr> exprs) {
+		Set(int line, java.util.Set<Expr> exprs) {
 			this.exprs = exprs;
 			eltType = exprs.isEmpty() ? Type.Any : exprs.iterator().next().type;
 			type = new Type.SetType(eltType);
-			this.line = name.line;
+			this.line = line;
 		}
 		
 		java.util.Set<Expr> exprs;
@@ -494,13 +489,13 @@ public abstract class Expr {
 	}
 
 	static class Range extends Expr {
-		Range(Token name, Expr start, Expr end, boolean startIncl, boolean endIncl) {
+		Range(int line, Expr start, Expr end, boolean startIncl, boolean endIncl) {
 			this.start = start;
 			this.startIncl = startIncl;
 			this.end = end;
 			this.endIncl = endIncl;
 			type = new Type.Range("Range", start, end);
-			this.line = name.line;
+			this.line = line;
 		}
 		
 		Expr start;
@@ -518,11 +513,11 @@ public abstract class Expr {
 	}
 
 	static class Mapping extends Expr {
-		Mapping(Token name, String  key, Expr value, boolean arrow) {
+		Mapping(int line, String  key, Expr value, boolean arrow) {
 			this.key = key;
 			this.value = value;
 			type = value.type;
-			this.line = name.line;
+			this.line = line;
 			this.arrow = arrow;
 		}
 		
@@ -541,28 +536,28 @@ public abstract class Expr {
 
 	static class Assign extends Expr {
 		
-		Assign(Token var, Expr value, Token op) {
+		Assign(String var, int line, Expr value, Token op) {
 			this.var = new ArrayList<>();
 			this.var.add(var);
 			this.value = value;
 			this.op = op;
 			type = value.type;
-			this.line = var.line;
+			this.line = line;
 		}
 
-		Assign(List<Token> var, Expr value, Token op) {
+		Assign(List<String> var, int line, Expr value, Token op) {
 			this.var = var;
 			this.value = value;
 			this.op = op;
 			type = value.type;
-			this.line = var.get(0).line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitAssignExpr(this);
 		}
 
-		final List<Token> var;
+		final List<String> var;
 		final Expr value;
 		final Token op;
 		@Override
@@ -572,7 +567,7 @@ public abstract class Expr {
 	}
 
 	static class Binary extends Expr {
-		Binary(Expr left, Token operator, Expr right) {
+		Binary(int line, Expr left, String operator, Expr right) {
 			this.left = left;
 			this.operator = operator;
 			this.right = right;
@@ -583,16 +578,12 @@ public abstract class Expr {
 				//LEFT   a RELOP b
 				//       AND
 				//RIGHT  b RELOP c
-				Token and = new Token(Soperator.AND, "&", "&", operator.line);
-				this.left = new Binary(this.left, operator, ((Binary)right).left);
-				this.operator = and;
+				this.left = new Binary(line, this.left, operator, ((Binary)right).left);
+				this.operator = "&";
 				this.right = right;
 			}
-			type = left.type.equals(right.type) ? left.type :
-				left.type.equals(Type.Any) ? right.type :
-				right.type.equals(Type.Any) ? left.type:
-				widen(left.type, right.type);
-			this.line = operator.line;
+			this.type = this.left.type;
+			this.line = line;
 		}
 		
 		private boolean isRelOp(Expr expr) {
@@ -606,29 +597,15 @@ public abstract class Expr {
 			return false;
 		}
 
-		private boolean isRelOperator(Token tok) {
-			return tok.type == Soperator.LESS ||
-					tok.type == Soperator.LESS_EQUAL ||
-					tok.type == Soperator.GREATER ||
-					tok.type == Soperator.GREATER_EQUAL ||
-					tok.type == Soperator.EQUAL ||
-					tok.type == Soperator.NOT_EQUAL ||
-					tok.type == Soperator.EQEQ ||
-					tok.type == Soperator.NEQEQ;
-		}
-
-		private Type widen(Type t1, Type t2) {
-			
-			Object func1 = t1.interfaces.get(new Signature("to" + t2, t2, t1));
-			Object func2 = t2.interfaces.get(new Signature("to" + t1, t1, t2));
-
-			if (func1 != null && func1 instanceof Method) {
-				return Interpreter.typeFromClass(((Method)func1).getReturnType());
-			} else if (func2 != null && func2 instanceof Method) {
-				return Interpreter.typeFromClass(((Method)func2).getReturnType());
-			} else {
-				return Type.Void;
-			}
+		private boolean isRelOperator(String op) {
+			return op.equals("<") ||
+					op.equals("<=") ||
+					op.equals(">") ||
+					op.equals(">=") ||
+					op.equals("=") ||
+					op.equals("~=") ||
+					op.equals("==") ||
+					op.equals("~==");
 		}
 
 		Result accept(Visitor visitor) {
@@ -636,51 +613,51 @@ public abstract class Expr {
 		}
 
 		Expr left;
-		Token operator;
+		String operator;
 		Expr right;
 		@Override
 		public String toString() {
-			return left + " " + operator.lexeme + " " + right;
+			return left + " " + operator + " " + right;
 		}
 	}
 
 	static class Unary extends Expr {
-		Unary(Token operator, Expr right) {
+		Unary(int line, String operator, Expr right) {
 			this.operator = operator;
 			this.right = right;
 			type = right.type;
-			this.line = operator.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitUnaryExpr(this);
 		}
 
-		final Token operator;
+		final String operator;
 		final Expr right;
 		@Override
 		public String toString() {
-			return operator.lexeme + right;
+			return operator + right;
 		}
 	}
 
 	static class Postfix extends Expr {
-		Postfix(Expr left, Token operator) {
+		Postfix(int line, Expr left, String operator) {
 			this.operator = operator;
 			this.left = left;
 			type = left.type;
-			this.line = operator.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitPostfixExpr(this);
 		}
 
-		final Token operator;
+		final String operator;
 		final Expr left;
 		@Override
 		public String toString() {
-			return left + operator.lexeme;
+			return left + operator;
 		}
 	}
 
@@ -689,14 +666,14 @@ public abstract class Expr {
 		List<Expr> expressions = new ArrayList<>();
 		Expr last;
 		
-		Block(Token name, List<Expr> expressions) {
+		Block(int line, List<Expr> expressions) {
 			if(expressions.isEmpty()) {
-				expressions.add(new Expr.Literal(name,null));
+				expressions.add(new Expr.Literal(line, null));
 			}
 			this.expressions = expressions;
 			last = expressions.get(expressions.size() - 1);
 			type = last.type;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -709,14 +686,14 @@ public abstract class Expr {
 	}
 
 	static class If extends Expr {
-		If(Token name, Expr condition, Expr thenBranch, Expr elseBranch, Set criteria) {
+		If(String name, int line, Expr condition, Expr thenBranch, Expr elseBranch, Set criteria) {
 			this.condition = condition;
 			this.thenBranch = thenBranch;
 			this.elseBranch = elseBranch;
 			this.criteria = criteria;
 			type = Type.Void;
-			this.line = name.line;
-			if(name.lexeme.equals(Keyword.UNLESS.name())) {
+			this.line = line;
+			if(name.equals(Keyword.UNLESS.name())) {
 				invert = true;
 			} else {
 				invert = false;
@@ -739,13 +716,13 @@ public abstract class Expr {
 	}
 
 	static class Select extends Expr {
-		Select(Token name, Expr condition, List<Expr> whenExpressions, List<Expr> whenBranches, Expr elseBranch) {
+		Select(int line, Expr condition, List<Expr> whenExpressions, List<Expr> whenBranches, Expr elseBranch) {
 			this.condition = condition;
 			this.whenExpressions = whenExpressions;
 			this.whenBranches = whenBranches;
 			this.elseBranch = elseBranch;
 			type = Type.Void;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -763,10 +740,10 @@ public abstract class Expr {
 	}
 
 	static class Literal extends Expr {
-		Literal(Token name, Object value) {
+		Literal(int line, Object value) {
 			this.value = value;
 			type = Interpreter.typeFromValue(value);
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -781,36 +758,36 @@ public abstract class Expr {
 	}
 	
 	static class Variable extends Expr {
-		Variable(Token name) {
+		Variable(String name, int line) {
 			this.name = name;
 			this.type = Type.Any;
-			this.line = name.line;
+			this.line = line;
 		}
 
-		public Variable(Token name, Type type) {
+		public Variable(String name, int line, Type type) {
 			this.name = name;
 			this.type = type;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitVariableExpr(this);
 		}
 
-		final Token name;
+		final String name;
 		
 		@Override
 		public String toString() {
-			return name.lexeme;
+			return name;
 		}
 	}
 
 	static class TypeLiteral extends Expr {
-		TypeLiteral(Token name, Type type, Attributes attributes) {
+		TypeLiteral(int line, Type type, Attributes attributes) {
 			this.type = Type.Type;
 			this.literal = type;
 			this.attr = attributes;
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
@@ -826,7 +803,7 @@ public abstract class Expr {
 	}
 
 	static class TypeDef extends Expr {
-		TypeDef(Token name, Type type, Attributes attributes) {
+		TypeDef(String name, int line, Type type, Attributes attributes) {
 			this.name = name;
 			this.type = Type.Type;
 			this.literal = type;
@@ -836,14 +813,14 @@ public abstract class Expr {
 			} else {
 				attributes.put(PUBLIC, true);
 			}
-			this.line = name.line;
+			this.line = line;
 		}
 
 		Result accept(Visitor visitor) {
 			return visitor.visitTypeDefExpr(this);
 		}
 		
-		final Token name;
+		final String name;
 		final Type literal;
 		Attributes attributes = new Attributes();
 
@@ -859,6 +836,7 @@ public abstract class Expr {
 			this.current = current;
 			this.next = next;
 			this.safe = safe;
+			this.line = current.line;
 		}
 		
 		Result accept(Visitor visitor) {
@@ -881,6 +859,7 @@ public abstract class Expr {
 			this.seq = seq;
 			this.sub = sub;
 			this.safe = safe;
+			this.line = seq.line;
 		}
 		
 		Result accept(Visitor visitor) {
@@ -904,6 +883,7 @@ public abstract class Expr {
 			this.current = current;
 			this.next = next;
 			this.safe = safe;
+			this.line = current.line;
 		}
 		
 		Result accept(Visitor visitor) {
@@ -921,14 +901,13 @@ public abstract class Expr {
 
 	public static class Import extends Expr {
 
-		public Import(Token name, Expr.Map imports, String repo, Attributes attributes) {
-			this.name = name;
+		public Import(int line, Expr.Map imports, String repo, Attributes attributes) {
 			this.repo = repo;
 			this.imports = imports;
 			this.attributes = attributes;
+			this.line = line;
 		}
 
-		Token name;
 		String repo;
 		Expr.Map imports;
 		Attributes attributes = new Attributes();

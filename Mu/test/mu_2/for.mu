@@ -16,8 +16,7 @@ for var i in s (
 	print i.type
 )
 
-var lst: ["a", "b", "c"]
-
+print "Loop over list:"
 for var i in lst ( 
 	if (i ~= "b") (
 		print i

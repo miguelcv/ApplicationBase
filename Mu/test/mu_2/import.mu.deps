@@ -1,0 +1,69 @@
+{
+  "log4j:log4j" : {
+    "coords" : {
+      "group" : "log4j",
+      "artifact" : "log4j",
+      "version" : "1.2.17",
+      "checksum" : "1d31696445697720527091754369082a6651bd49781b6005deb94e56753406f9"
+    },
+    "dependencies" : [ {
+      "coords" : {
+        "group" : "javax.mail",
+        "artifact" : "mail",
+        "version" : "1.4.3",
+        "checksum" : "1013bdb70140467ef9a1d7dd9d1b71d4e82e6a27f361be41b4598a3c1b1a9f12"
+      },
+      "dependencies" : [ ]
+    }, {
+      "coords" : {
+        "group" : "org.apache.openejb",
+        "artifact" : "javaee-api",
+        "version" : "5.0-2",
+        "checksum" : "a76a5097d08f0e1def016cc84326c34cc5845414a05ddf446f19a0dc91f76d9c"
+      },
+      "dependencies" : [ ]
+    }, {
+      "coords" : {
+        "group" : "org.apache.geronimo.specs",
+        "artifact" : "geronimo-jms_1.1_spec",
+        "version" : "1.0",
+        "checksum" : "293180afed47a7276b2180cd37baf2c89d41452b982d8b9b11fb0271303e1bc1"
+      },
+      "dependencies" : [ ]
+    } ]
+  },
+  "com.fasterxml.jackson.core:jackson-databind" : {
+    "coords" : {
+      "group" : "com.fasterxml.jackson.core",
+      "artifact" : "jackson-databind",
+      "version" : "2.9.6",
+      "checksum" : "657e3e979446d61f88432b9c50f0ccd9c1fe4f1c822d533f5572e4c0d172a125"
+    },
+    "dependencies" : [ {
+      "coords" : {
+        "group" : "com.fasterxml.jackson.core",
+        "artifact" : "jackson-annotations",
+        "version" : "2.9.6",
+        "checksum" : "4d1ce5575ad53bee8caae4c15016878e2c3ea47276e675a35ea6bdde3bb0e653"
+      },
+      "dependencies" : [ ]
+    }, {
+      "coords" : {
+        "group" : "com.fasterxml.jackson.core",
+        "artifact" : "jackson-core",
+        "version" : "2.9.6",
+        "checksum" : "fab8746aedd6427788ee390ea04d438ec141bff7eb3476f8bdd5d9110fb2718a"
+      },
+      "dependencies" : [ ]
+    } ]
+  },
+  "miguelcv:ApplicationBase" : {
+    "coords" : {
+      "group" : "miguelcv",
+      "artifact" : "ApplicationBase",
+      "version" : "07729a6fdd675f15782daf35b37aff52ea1e3deb",
+      "checksum" : "34f7eb381c7448bdb8e71325b7b06992afa7857d0bd9e642d629c993d68917b8"
+    },
+    "dependencies" : [ ]
+  }
+}

@@ -44,8 +44,6 @@ print r %= i2
 
 //POWIS:
 print i ^= i2
-// XOR!
-print b ^= b2
 print r ^= r2
 // int -> real
 print r ^= i2
@@ -60,6 +58,10 @@ print s &= c2
 //ORIS:
 print i |= i2
 print b |= b2
+
+//XORIS:
+//print i ⊕= i2
+//print b ⊕= b2
 
 //LSHIFTIS:
 print i <<= i2

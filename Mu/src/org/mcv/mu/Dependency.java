@@ -1,7 +1,9 @@
 package org.mcv.mu;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import org.mcv.utils.FileUtils;
 
 public class Dependency {
 	
@@ -39,9 +41,18 @@ public class Dependency {
 			return group + ":" + artifact;
 		}
 
+		public boolean check(File file) {
+			if(checksum == null || checksum.isEmpty()) {
+				checksum = FileUtils.computeHash256(file);
+				return true;
+			}
+			return checksum.equals(FileUtils.computeHash256(file));
+		}
+
 		String group;
 		String artifact;
 		String version;
+		String checksum;
 	}
 
 

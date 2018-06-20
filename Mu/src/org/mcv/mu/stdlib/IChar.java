@@ -58,6 +58,10 @@ public class IChar extends IType {
 		return a < b ? a : b;		
 	}
 
+	public static Integer id(Integer a) {
+		return a;
+	}
+
 	public static String toString(Integer a) {
 		return new String(Character.toChars(a));
 	}
