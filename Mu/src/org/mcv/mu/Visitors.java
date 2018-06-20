@@ -33,7 +33,6 @@ import org.mcv.mu.Type.ListEnum;
 import org.mcv.mu.Type.ListType;
 import org.mcv.mu.Type.MapType;
 import org.mcv.mu.Type.RefType;
-import org.mcv.mu.Type.SetEnum;
 import org.mcv.mu.Type.SetType;
 import org.mcv.mu.Type.SignatureType;
 import org.mcv.mu.Type.UnionType;
