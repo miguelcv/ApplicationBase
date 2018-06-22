@@ -1,13 +1,14 @@
-* threads, await, async
-
-* BUG: line off-by-one (or more)
-* BUG: comments and indentation?
-
-STDLIB:
-* date/time, regex
-* queues, stacks, trees, bags, bitstrings
-* complex, rational, bcd
-...
-
+* datetime, sleep, clock
+* regex
+* json
+* math; complex, rational, bcd 
+* collections
+* I/O, net
+* exec
+* crypto, zip
+* reflection
 * ? automated tests
 * ? macros
+
+* ?BUG: line off-by-one (or more)
+* ?BUG: comments and indentation?

@@ -23,7 +23,8 @@ print 2 :~!@#$%^&* 6
 
 // Unicode Symbols
 op("≈") fun almosteq(Int left, Int right) => Bool : (
-	return abs (left-right) < 2
+	//return abs(left-right) < 2
+	\left-right\ < 2
 )
 
 print almosteq(2,3)

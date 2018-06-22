@@ -18,6 +18,7 @@ import org.mcv.mu.stdlib.IAny;
 import org.mcv.mu.stdlib.IBool;
 import org.mcv.mu.stdlib.IChar;
 import org.mcv.mu.stdlib.IException;
+import org.mcv.mu.stdlib.IFuture;
 import org.mcv.mu.stdlib.IInt;
 import org.mcv.mu.stdlib.IList;
 import org.mcv.mu.stdlib.IMap;
@@ -35,7 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Type {
 
-	public static final Object UNDEFINED = new Object();
+	public static final Undefined UNDEFINED = Undefined.getInstance();
 	static Interfaces interfaces = new Interfaces();
 
 	public static Type None = new NoneType("None");
@@ -54,6 +55,7 @@ public class Type {
 	public static Type A = new NoneType("A");
 	public static Type B = new NoneType("B");
 	public static Type C = new NoneType("C");
+	public static Type Future = new RefType("Future", IFuture.class, Any);
 
 	protected Class<?> javaClass;
 	String name;
@@ -73,8 +75,8 @@ public class Type {
 		this.name = name;
 		try {
 			javaClass = Class.forName("org.mcv.mu.stdlib.I" + name);
-			interfaces.put(name, interfaces());
-		} catch (Exception e) {
+			//interfaces.put(name, interfaces());
+		} catch (Throwable e) {
 			// System.err.println("Class not found: I" + name);
 		}
 	}
@@ -86,7 +88,7 @@ public class Type {
 			javaClass = Class.forName("org.mcv.mu.stdlib.I" + name);
 			interfaces.put(name, interfaces());
 		} catch (Throwable e) {
-			throw new MuException("Class interfaces not found: " + name);
+			//throw new MuException("Class interfaces not found: " + name);
 		}
 	}
 

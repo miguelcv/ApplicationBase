@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
 
@@ -41,7 +42,7 @@ public class JavaHelper {
 								Class<?> cl = loader.loadClass(className);
 								result.add(cl);
 							} catch (Exception e) {
-								System.err.println(e.toString());
+								System.err.println("handleJar: " + e.toString());
 							}
 						}
 					}
@@ -69,6 +70,10 @@ public class JavaHelper {
 		// define self
 		tmpl.closure.define(tmpl.javaClass.getSimpleName(),
 				new Result(tmpl, new Type.SignatureType((TemplateDef) tmpl.def)), false, false);
+
+		Constructor<?>[] constructors = tmpl.javaClass.getConstructors();
+		tmpl.javaConstructorList = Arrays.asList(constructors);
+
 		Method[] methods = tmpl.javaClass.getMethods();
 		for (Method method : methods) {
 			// Java has overloaded methods!!
@@ -100,7 +105,7 @@ public class JavaHelper {
 		}
 	}
 
-	private static Callee calleeFromMethod(Interpreter mu, Method method, Object object) {
+	static Callee calleeFromMethod(Interpreter mu, Method method, Object object) {
 		Template fun = new Template();
 		fun.kind = "fun";
 		fun.attributes.put("jvm", true);
@@ -180,8 +185,6 @@ public class JavaHelper {
 		tmpl.params = new Params();
 		tmpl.params.vararg = true;
 
-		Constructor<?>[] constructors = clazz.getConstructors();
-		tmpl.javaConstructorList = Arrays.asList(constructors);
 		tmpl.def = new Expr.TemplateDef(name, mu.currentLine, "class", tmpl.params, tmpl.returnType,
 				new Expr.Block(mu.currentLine, new ArrayList<>()), tmpl.attributes);
 		tmpl.returnType = new Type.SignatureType((TemplateDef) tmpl.def);
@@ -288,6 +291,10 @@ public class JavaHelper {
 				return param;
 			if (javaType.isAssignableFrom(Throwable.class))
 				return param;
+			if (javaType.isAssignableFrom(Future.class))
+				return param;
+			if (javaType.equals(BigInteger.class))
+				return param;
 			if (javaType.isAssignableFrom(Class.class)) {
 				return ((Template) param).javaClass;
 			} else {
@@ -306,7 +313,11 @@ public class JavaHelper {
 					continue;
 				Object[] args = toJavaArgs(obj.params, types);
 				for (int i = 0; i < types.length; i++) {
-					if (!types[i].isAssignableFrom(args[i].getClass())) {
+					if(types[i].isPrimitive()) {
+						if(!checkPrimitive(types[i], args[i])) {
+							continue nextMethod;
+						}
+					} else if (!types[i].isInstance(args[i])) {
 						continue nextMethod;
 					}
 				}
@@ -318,6 +329,38 @@ public class JavaHelper {
 		throw new Interpreter.InterpreterError("No suitable method: " + obj.javaMethodList.get(0).getName());
 	}
 
+	static boolean checkPrimitive(Class<?> primitive, Object actual) {
+		if(actual.getClass().equals(primitive)) return true;
+		if(primitive.equals(boolean.class)) {
+			return actual instanceof Boolean;
+		}
+		if(primitive.equals(char.class)) {
+			return actual instanceof Character;
+		}
+		if(primitive.equals(byte.class)) {
+			return actual instanceof Byte;
+		}
+		if(primitive.equals(short.class)) {
+			return actual instanceof Short;
+		}
+		if(primitive.equals(int.class)) {
+			return actual instanceof Integer;
+		}
+		if(primitive.equals(long.class)) {
+			return actual instanceof Long;
+		}
+		if(primitive.equals(float.class)) {
+			return actual instanceof Float;
+		}
+		if(primitive.equals(double.class)) {
+			return actual instanceof Double;
+		}
+		if(primitive.equals(void.class)) {
+			return actual instanceof Void;
+		}
+		return false;
+	}
+	
 	public static Object lookupAndInvokeConstructor(Callee obj) {
 		nextConstructor: for (Constructor<?> constructor : obj.parent.javaConstructorList) {
 			try {

@@ -8,7 +8,7 @@ public class Result {
 		this.value = value;
 		this.type = type;
 	}
-	Object value;
+	public Object value;
 	Type type;
 	
 	@Override public String toString() {

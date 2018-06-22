@@ -5,7 +5,7 @@ public enum Keyword implements TokenType {
 	IMPORT, FROM, AS, WHERE,
 	TYPE, CLASS, 
 	UNIT, SIUNIT,
-	FUN,
+	FUN, START,
 	RETURN,
 	THROW,
 	PRINT, ASSERT,

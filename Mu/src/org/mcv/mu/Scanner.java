@@ -279,7 +279,7 @@ class Scanner {
 			tok = match('.') ? DOTDOT : DOT;
 			break;
 		case ':':
-			tok = match('=') ? ASSIGN : COLON;
+			tok = match('=') ? ASSIGN : match('^') ? UPARROW : COLON;
 			break;
 		case '←':
 			tok = ASSIGN;

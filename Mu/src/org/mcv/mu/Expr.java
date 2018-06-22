@@ -31,6 +31,7 @@ public abstract class Expr {
 		Result visitBreakExpr(Break expr);
 		Result visitContinueExpr(Continue expr);
 		Result visitReturnExpr(Return expr);
+		Result visitStartExpr(Start expr);
 		Result visitAopExpr(Aop expr);
 		Result visitGetterExpr(Getter expr);
 		Result visitSetterExpr(Setter expr);
@@ -327,6 +328,24 @@ public abstract class Expr {
 		}
 	}
 
+	static class Start extends Expr {
+		Start(int line, Expr value) {
+			this.value = value;
+			type = value.type;
+			this.line = line;
+		}
+
+		Result accept(Visitor visitor) {
+			return visitor.visitStartExpr(this);
+		}
+
+		final Expr value;
+		@Override
+		public String toString() {
+			return "start " + value;
+		}
+	}
+
 	static class Throw extends Expr {
 		Throw(int line, Expr thrown) {
 			this.thrown = thrown;
@@ -346,18 +365,14 @@ public abstract class Expr {
 	}
 
 	static class While extends Expr {
-		While(String name, int line, Expr condition, Expr body, Expr atEnd, Set criteria) {
+		While(String name, int line, Expr condition, Expr body, Expr atEnd, boolean invert, Set criteria) {
 			this.condition = condition;
 			this.body = body;
 			this.criteria = criteria;
 			this.atEnd = atEnd;
 			type = Type.Void;
 			this.line = line;
-			if(name.equals(Keyword.UNTIL.name())) {
-				invert = true;
-			} else {
-				invert = false;
-			}
+			this.invert = invert;
 		}
 
 		Result accept(Visitor visitor) {
@@ -686,18 +701,14 @@ public abstract class Expr {
 	}
 
 	static class If extends Expr {
-		If(String name, int line, Expr condition, Expr thenBranch, Expr elseBranch, Set criteria) {
+		If(String name, int line, Expr condition, Expr thenBranch, Expr elseBranch, boolean invert, Set criteria) {
 			this.condition = condition;
 			this.thenBranch = thenBranch;
 			this.elseBranch = elseBranch;
 			this.criteria = criteria;
 			type = Type.Void;
 			this.line = line;
-			if(name.equals(Keyword.UNLESS.name())) {
-				invert = true;
-			} else {
-				invert = false;
-			}
+			this.invert = invert;
 		}
 
 		Result accept(Visitor visitor) {

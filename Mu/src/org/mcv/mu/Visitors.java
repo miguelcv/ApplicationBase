@@ -20,6 +20,7 @@ import org.mcv.mu.Expr.Dot;
 import org.mcv.mu.Expr.For;
 import org.mcv.mu.Expr.Mapping;
 import org.mcv.mu.Expr.Seq;
+import org.mcv.mu.Expr.Start;
 import org.mcv.mu.Expr.Subscript;
 import org.mcv.mu.Expr.TemplateDef;
 import org.mcv.mu.Expr.TypeDef;
@@ -177,7 +178,12 @@ public class Visitors implements Expr.Visitor {
 
 		if(stmt.attributes.containsKey("jvm")) {
 			if(stmt.kind.equals("class")) {
-				JavaHelper.evalClass(mu, tmpl);
+				try {
+					tmpl.javaClass = Class.forName((String)stmt.attributes.get("jvm"), true, mu.classLoader);
+					JavaHelper.evalClass(mu, tmpl);
+				} catch(Exception e) {
+					// too bad
+				}
 			}
 			return res;
 		}
@@ -360,6 +366,13 @@ public class Visitors implements Expr.Visitor {
 							}
 							result.put(k2, JavaHelper.classToTemplate(mu, clazz.getSimpleName(), clazz));
 						}
+					} else {
+						try {
+							Class<?> clazz = Class.forName(value);
+							result.put(key, JavaHelper.classToTemplate(mu, clazz.getSimpleName(), clazz));
+						} catch(Exception e) {
+							return new Result(new MuException("Class " + value + " not found"), Type.Exception);
+						}
 					}
 				}
 			}
@@ -437,7 +450,7 @@ public class Visitors implements Expr.Visitor {
 				mapper.writerWithDefaultPrettyPrinter().writeValue(f, deps);
 			}
 		} catch (Exception e) {
-			System.err.println(e);
+			System.err.println("store deps: " + e);
 			/**/
 		}
 	}
@@ -560,8 +573,21 @@ public class Visitors implements Expr.Visitor {
 				return new Result(left.value, target);
 			}
 		}
+		
+		if(expr.operator.equals("in") || expr.operator.equals("∈")) {
+			if(right.type.equals(Type.String) && !left.type.equals(Type.String)) {
+				// unit unit string
+				sig = mu.ops.getFunction(expr.operator, left.type, right.type, Type.Unit);			
+			} else {
+				// bool elt list
+				left = rightOrg;
+				right = leftOrg;
+				sig = mu.ops.getFunction(expr.operator, left.type, right.type, Type.Bool);
+			}
+		} else {
+			sig = mu.ops.getFunction(expr.operator, left.type, right.type);
+		}
 
-		sig = mu.ops.getFunction(expr.operator, left.type, right.type);
 		try {
 			if(!sig.paramTypes.get(1).matches(right.type)) {
 				right = convert(rightOrg, sig.paramTypes.get(1));
@@ -625,6 +651,14 @@ public class Visitors implements Expr.Visitor {
 
 		switch (expr.operator) {
 
+		case "~":
+			if (right.value instanceof BigInteger) {
+				return mu.invoke(sig.name, sig, right);				
+			} else {
+				sig = mu.prefixOps.getFunction(expr.operator, right.type, Type.Bool);
+				return mu.invoke(sig.name, sig, right);				
+			}
+			
 		case "++":
 			Result result = mu.invoke(sig.name, sig, right);
 			mu.assign(((Expr.Variable) expr.right), result);
@@ -643,9 +677,6 @@ public class Visitors implements Expr.Visitor {
 				refType = new RefType(right.type);
 			}
 			return mu.invoke(sig.name, sig, new Result(right.value, refType));
-
-		case "↑":
-			return mu.invoke(sig.name, sig, right);
 			
 		case "*":
 			return mu.evaluate(expr.right);
@@ -845,7 +876,7 @@ public class Visitors implements Expr.Visitor {
 	public Result visitVariableExpr(Expr.Variable expr) {
 		Result res = mu.environment.get(expr.name);
 		if(res == null) {
-			throw new MuException("Undefined varaiable '%s'", expr.name );
+			throw new MuException("Undefined variable '%s'", expr.name );
 		}
 		if (res.value instanceof Property) {
 			/* it's a getter */
@@ -1069,6 +1100,19 @@ public class Visitors implements Expr.Visitor {
 	}
 
 	@Override
+	public Result visitStartExpr(Start expr) {
+		Result res = mu.evaluate(expr.value);
+		if (res.value == null) {
+			return res;
+		}
+		if (res.value instanceof Template) {
+			Task task = new Task((Template)res.value);
+			return new Result(task, new SignatureType(((Template)res.value).def));
+		}
+		throw new InterpreterError(res.value + "(" + res.type + ") is not callable");
+	}
+
+	@Override
 	public Result visitDotExpr(Dot expr) {
 		Result res = mu.evaluate(expr.current);
 		if (expr.safe && res.value == null) {
@@ -1079,7 +1123,7 @@ public class Visitors implements Expr.Visitor {
 		try {
 			Result ret = null;
 			if (res.value instanceof Template || res.value instanceof Map || res.value instanceof Map.Entry
-					|| res.value instanceof Callee) {
+					|| res.value instanceof Callee || res.value instanceof Type) {
 				if (expr.value != null) {
 					return mu.setdot(res, key, mu.evaluate(expr.value).value);
 				}

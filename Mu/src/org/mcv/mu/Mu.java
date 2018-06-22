@@ -144,7 +144,7 @@ public class Mu {
 			error(e);
 			return;
 		}
-		run(toRun);
+		run(toRun, new Interpreter(main, this));
 	}
 
 	public Form getNormalization() {
@@ -178,7 +178,7 @@ public class Mu {
 		try {
 			system.put("currentDirectory", System.getProperty("user.dir"));
 			system.put("currentFile", "REPL");
-
+			Interpreter repl = new Interpreter(main, this);
 			InputStreamReader input = new InputStreamReader(System.in, "UTF-8");
 			BufferedReader reader = new BufferedReader(input);
 
@@ -186,9 +186,9 @@ public class Mu {
 
 			for (;;) {
 				if (buffer.length() == 0)
-					System.out.print("> ");
+					System.out.print("< ");
 				else
-					System.out.print(">> ");
+					System.out.print("<< ");
 
 				String line = reader.readLine();
 				lines.add(line);
@@ -196,7 +196,7 @@ public class Mu {
 				if (line.endsWith("!")) {
 					line = line.substring(0, line.length() - 1);
 					buffer.append(line).append('\n');
-					run(buffer.toString());
+					System.out.println("> " + run(buffer.toString(), repl));
 					buffer = new StringBuilder();
 					hadError = false;
 					lines = new ArrayList<>();
@@ -220,6 +220,8 @@ public class Mu {
 		env.define("Char", new Result(Type.Char, Type.Type), false, true);
 		env.define("String", new Result(Type.String, Type.Type), false, true);
 		env.define("Type", new Result(Type.Type, Type.Type), false, true);
+		env.define("Exception", new Result(Type.Exception, Type.Type), false, true);
+		env.define("Future", new Result(Type.Future, Type.Type), false, true);
 
 		env.define("Inf", new Result(BigInteger.POSITIVE_INFINITY, Type.Int), false, true);
 		env.define("NaN", new Result(BigInteger.NAN, Type.Int), false, true);
@@ -232,7 +234,7 @@ public class Mu {
 		env.define("system", new Result(system, new Type.MapType(Type.Any)), true, true);
 	}
 
-	private void run(String source) {
+	private Result run(String source, Interpreter interpreter) {
 		Scanner scanner = new Scanner(source, main, this);
 		List<Token> tokens = scanner.scanTokens();
 		System.err.flush();
@@ -244,11 +246,10 @@ public class Mu {
 			System.err.println("Had errors: program will not run...");
 			System.err.flush();
 			hadError = false;
-			return;
+			return new Result(null, Type.Void);
 		}
 
 		System.err.flush();
-		Interpreter intr = new Interpreter(main, this);
 		// define $this...
 		String path = (String) system.get("currentFile");
 		if (path != null) {
@@ -256,7 +257,7 @@ public class Mu {
 			Template mainFunc = new Template(funcname, main);
 			main.define("$this", new Result(mainFunc, new Type.SignatureType((TemplateDef) mainFunc.def)), false, true);
 		}
-		intr.interpret(statements);
+		return interpreter.interpret(statements);
 	}
 
 	public Expr parse(String source) {

@@ -18,6 +18,7 @@ print l
 var s: {1, 2, 3, 4}
 var mixSet: {"a", 4, 4.8}
 print s
+print mixSet.type
 //print "expect error: " & s[0]
 
 // maps

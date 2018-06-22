@@ -94,7 +94,7 @@ public class Template {
 		callee.alwayses = copyStack(callee.parent.alwayses);
 		callee.javaClass = callee.parent.javaClass;
 		callee.javaMethodList = callee.parent.javaMethodList;
-		return Callee.call(interpreter, callee);
+		return callee.call(interpreter);
 	}
 		
 	public static synchronized Result call(Template self, Interpreter interpreter, Expr.Map args) {

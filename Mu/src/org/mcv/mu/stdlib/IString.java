@@ -53,4 +53,13 @@ public class IString extends IType {
 	public static String toString(String a) {
 		return String.valueOf(a);
 	}
+	
+	public static Boolean in(String b, String a) {
+		return b.contains(a);
+	}
+
+	public static Boolean not(String a) {
+		return !a.isEmpty();
+	}
+
 }

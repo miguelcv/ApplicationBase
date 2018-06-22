@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.Future;
 
 import org.mcv.math.BigInteger;
 import org.mcv.mu.Expr.TemplateDef;
@@ -29,6 +30,9 @@ public class Signature {
 	public Signature(Method method) {
 		name = method.getName();
 		returnType = typeFromClass(method.getReturnType());
+		if(returnType == null) {
+			System.err.println("WTF " + method + " null returnType");
+		}
 		paramTypes = new ArrayList<>();
 		for(Class<?> clazz : method.getParameterTypes()) {
 			paramTypes.add(typeFromClass(clazz));
@@ -54,8 +58,7 @@ public class Signature {
 	}
 
 	static Type typeFromClass(Class<?> clz) {
-		/* We have char, string, int, real, bool */
-		if (clz.equals(Void.class))
+		if(clz == null || clz.equals(Void.class))
 			return Type.Void;
 		if (clz.equals(Object.class))
 			return Type.Any;
@@ -73,6 +76,8 @@ public class Signature {
 			return Type.Unit;
 		if (clz.equals(MuException.class))
 			return Type.Exception;
+		if (clz.isAssignableFrom(Future.class))
+			return Type.Future;
 		if (clz.equals(Double.class) || clz.equals(double.class))
 			return Type.Real;
 		if (clz.equals(Boolean.class) || clz.equals(boolean.class))

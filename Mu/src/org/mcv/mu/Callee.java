@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class Callee {
 	/* prevent infinite loop in AROUND */
-	private boolean inaround;
+	protected boolean inaround;
 
 	Template parent;
 	protected Environment closure;
@@ -55,11 +55,11 @@ public class Callee {
 		return callee.parent.kind.equalsIgnoreCase(Keyword.CLASS.name());
 	}
 
-	private static Result exec(Callee obj, Interpreter mu, List<Expr> expressions, Environment closure) {
+	protected Result exec(Interpreter mu, List<Expr> expressions, Environment closure) {
 		try {
 			Result res = mu.executeBlock(expressions, closure);
-			if (isClass(obj))
-				return new Result(obj, new Type.SignatureType((TemplateDef) obj.parent.def));
+			if (isClass(this))
+				return new Result(this, new Type.SignatureType((TemplateDef) this.parent.def));
 			return res;
 		} catch (ReturnJump ret) {
 			return ret.value;
@@ -72,18 +72,18 @@ public class Callee {
 		}
 	}
 
-	private static Result invokeJava(Interpreter mu, Callee obj) {
+	protected Result invokeJava(Interpreter mu) {
 		try {
-			if (obj.parent.kind.equals("fun")) {
-				Object ret = JavaHelper.lookupAndInvokeMethod(obj);
+			if (parent.kind.equals("fun")) {
+				Object ret = JavaHelper.lookupAndInvokeMethod(this);
 				return JavaHelper.mkResult(mu, ret);
 			} else {
 				// class
-				if (obj.javaClass == null) {
-					obj.javaClass = JavaHelper.getClass(mu.classLoader, obj.parent.name);
+				if (javaClass == null) {
+					javaClass = JavaHelper.getClass(mu.classLoader, parent.name);
 				}
-				obj.javaObject = JavaHelper.lookupAndInvokeConstructor(obj);
-				return new Result(obj, new Type.SignatureType((TemplateDef) obj.parent.def));
+				javaObject = JavaHelper.lookupAndInvokeConstructor(this);
+				return new Result(this, new Type.SignatureType((TemplateDef) parent.def));
 			}
 		} catch (Exception e) {
 			log.error(e.toString(), e);
@@ -91,58 +91,58 @@ public class Callee {
 		}
 	}
 
-	static Result call(Interpreter mu, Callee callee) {
+	Result call(Interpreter mu) {
 		Result result = null;
 		try {
-			mu.funstk.push(callee.parent.name);
+			mu.funstk.push(parent.name);
 			// call around
-			if (callee.around != null) {
-				if (!callee.inaround) {
-					callee.inaround = true;
-					result = exec(callee, mu, callee.around.expressions, callee.closure);
-					callee.inaround = false;
+			if (around != null) {
+				if (!inaround) {
+					inaround = true;
+					result = exec(mu, around.expressions, closure);
+					inaround = false;
 					return result;
 				}
 			}
 
 			// call befores
-			while (!callee.befores.isEmpty()) {
-				Block block = callee.befores.pop();
-				exec(callee, mu, block.expressions, callee.closure);
+			while (!befores.isEmpty()) {
+				Block block = befores.pop();
+				exec(mu, block.expressions, closure);
 			}
 
 			/* call the actual function/constructor */
-			if (callee.parent.attributes.containsKey("jvm")) {
+			if (parent.attributes.containsKey("jvm")) {
 				/* native class or method! */
-				result = invokeJava(mu, callee);
+				result = invokeJava(mu);
 			} else {
-				result = exec(callee, mu, callee.parent.body.expressions, callee.closure);
+				result = exec(mu, parent.body.expressions, closure);
 			}
 
 			if (result.type.equals(Type.Exception)) {
 				// call errors
-				callee.closure.define("$exception", result, false, false);
-				while (!callee.errors.isEmpty()) {
-					Block block = callee.errors.pop();
-					result = exec(callee, mu, block.expressions, callee.closure);
+				closure.define("$exception", result, false, false);
+				while (!errors.isEmpty()) {
+					Block block = errors.pop();
+					result = exec(mu, block.expressions, closure);
 				}
 			} else {
 				// call afteFrs
-				callee.closure.define("$result", result, true, false);
-				while (!callee.afters.isEmpty()) {
-					Block block = callee.afters.pop();
-					result = exec(callee, mu, block.expressions, callee.closure);
+				closure.define("$result", result, true, false);
+				while (!afters.isEmpty()) {
+					Block block = afters.pop();
+					result = exec(mu, block.expressions, closure);
 				}
 			}
 			// call alwayses
-			while (!callee.alwayses.isEmpty()) {
-				Block block = callee.alwayses.pop();
-				exec(callee, mu, block.expressions, callee.closure);
+			while (!alwayses.isEmpty()) {
+				Block block = alwayses.pop();
+				exec(mu, block.expressions, closure);
 			}
 
 			return result;
 		} catch (Exception e) {
-			System.err.println(e);
+			log.debug(e.toString(), e);
 			return null;
 		} finally {
 			mu.funstk.pop();

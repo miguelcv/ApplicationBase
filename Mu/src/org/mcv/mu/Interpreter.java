@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.Stack;
+import java.util.concurrent.Future;
 
 import org.mcv.math.BigInteger;
 import org.mcv.mu.Expr.Assign;
@@ -65,44 +66,46 @@ public class Interpreter {
 	}
 
 	private void defineOperators() {
-		ops.makeOperator(new Signature("and", Type.A,  	Type.A, Type.A), "&");
-		ops.makeOperator(new Signature("or", Type.A,   	Type.A, Type.A), "|");
-		ops.makeOperator(new Signature("xor", Type.A, 	Type.A, Type.A), "⊕", "⊻", "xor");
-		ops.makeOperator(new Signature("in", Type.Unit, Type.A, Type.String), "in");
-		ops.makeOperator(new Signature("as", Type.B, 	Type.A, Type.B), "as");
-		ops.makeOperator(new Signature("lt", Type.Bool,	Type.A, Type.A), "<");
-		ops.makeOperator(new Signature("gt", Type.Bool, 	Type.A, Type.A), ">");
-		ops.makeOperator(new Signature("le", Type.Bool, 	Type.A, Type.A), "<=", "≤");
-		ops.makeOperator(new Signature("ge", Type.Bool, 	Type.A, Type.A), ">=", "≥");
-		ops.makeOperator(new Signature("eq", Type.Bool, 	Type.A, Type.A), "=");
-		ops.makeOperator(new Signature("eqeq", Type.Bool, 	Type.A, Type.A), "==");
-		ops.makeOperator(new Signature("neq", Type.Bool, 	Type.A, Type.A), "~=", "¬=");
+		ops.makeOperator(new Signature("and", Type.A, Type.A, Type.A), "&");
+		ops.makeOperator(new Signature("or", Type.A, Type.A, Type.A), "|");
+		ops.makeOperator(new Signature("xor", Type.A, Type.A, Type.A), "⊕", "⊻", "xor");
+
+		ops.makeOperator(new Signature("in", Type.C, Type.A, Type.B), "in", "∈");
+
+		ops.makeOperator(new Signature("as", Type.B, Type.A, Type.B), "as");
+		ops.makeOperator(new Signature("lt", Type.Bool, Type.A, Type.A), "<");
+		ops.makeOperator(new Signature("gt", Type.Bool, Type.A, Type.A), ">");
+		ops.makeOperator(new Signature("le", Type.Bool, Type.A, Type.A), "<=", "≤");
+		ops.makeOperator(new Signature("ge", Type.Bool, Type.A, Type.A), ">=", "≥");
+		ops.makeOperator(new Signature("eq", Type.Bool, Type.A, Type.A), "=");
+		ops.makeOperator(new Signature("eqeq", Type.Bool, Type.A, Type.A), "==");
+		ops.makeOperator(new Signature("neq", Type.Bool, Type.A, Type.A), "~=", "¬=");
 		ops.makeOperator(new Signature("neqeq", Type.Bool, Type.A, Type.A), "~==", "¬==");
-		ops.makeOperator(new Signature("plus", Type.A, 	Type.A, Type.A), "+");
+		ops.makeOperator(new Signature("plus", Type.A, Type.A, Type.A), "+");
 		ops.makeOperator(new Signature("minus", Type.A, Type.A, Type.A), "-");
 		ops.makeOperator(new Signature("mul", Type.A, Type.A, Type.A), "*", "×");
-		ops.makeOperator(new Signature("div", Type.A, 	Type.A, Type.A), "/", "÷");
-		ops.makeOperator(new Signature("rem", Type.A, 	Type.A, Type.A), "%");
-		ops.makeOperator(new Signature("pow", Type.A, 	Type.A, Type.B), "^");
-		ops.makeOperator(new Signature("lsh", Type.A, 	Type.A, Type.A), "<<");
-		ops.makeOperator(new Signature("rsh", Type.A, 	Type.A, Type.A), ">>");
+		ops.makeOperator(new Signature("div", Type.A, Type.A, Type.A), "/", "÷");
+		ops.makeOperator(new Signature("rem", Type.A, Type.A, Type.A), "%");
+		ops.makeOperator(new Signature("pow", Type.A, Type.A, Type.B), "^");
+		ops.makeOperator(new Signature("lsh", Type.A, Type.A, Type.A), "<<");
+		ops.makeOperator(new Signature("rsh", Type.A, Type.A, Type.A), ">>");
 
 		prefixOps.makeOperator(new Signature("neg", Type.A, Type.A), "-");
 		prefixOps.makeOperator(new Signature("id", Type.A, Type.A), "+");
-		prefixOps.makeOperator(new Signature("not", Type.A, Type.A), "~", "¬");
+		prefixOps.makeOperator(new Signature("not", Type.B, Type.A), "~", "¬");
 		prefixOps.makeOperator(new Signature("inc", Type.A, Type.A), "++");
 		prefixOps.makeOperator(new Signature("dec", Type.A, Type.A), "--");
 		prefixOps.makeOperator(new Signature("abs", Type.A, Type.A), "abs", "\\");
 		prefixOps.makeOperator(new Signature("ref", new Type.RefType(Type.Any), Type.A), "@");
-		prefixOps.makeOperator(new Signature("deref", Type.A, new Type.RefType(Type.Any)), "↑");
 		prefixOps.makeOperator(new Signature("spread", Type.A, Type.A), "*");
 		prefixOps.makeOperator(new Signature("sqrt", Type.A, Type.A), "sqrt", "√");
-		
+
 		postfixOps.makeOperator(new Signature("inc", Type.A, Type.A), "++");
 		postfixOps.makeOperator(new Signature("dec", Type.A, Type.A), "--");
 		postfixOps.makeOperator(new Signature("fac", Type.A, Type.A), "!");
+		postfixOps.makeOperator(new Signature("deref", Type.A, new Type.RefType(Type.Any)), "↑", ":^");
 	}
-	
+
 	public Result evalFile(File path, Environment env) {
 		return handler.evalFile(path, env);
 	}
@@ -111,59 +114,68 @@ public class Interpreter {
 	List<Expr> gexpressions;
 	int currentLine = 0;
 
-	void interpret(List<Expr> expressions) {
+	Result interpret(List<Expr> expressions) {
 		// DEBUG
 		gexpressions = expressions;
 		stdMacros();
-		
+		Result result = new Result(null, Type.Void);
 		for (Expr current : expressions) {
 			currentLine = current.line;
 			updateMacros(currentLine, funstk.peek());
 			try {
 				boolean isImport = false;
-				if(current instanceof Expr.Import) {
+				if (current instanceof Expr.Import) {
 					isImport = true;
 				}
-				Result result = evaluate(current);
+				result = evaluate(current);
 				if (result.type.equals(Type.Exception)) {
 					throw (MuException) result.value;
 				}
-				if(isImport) {
+				if (isImport) {
 					@SuppressWarnings("unchecked")
-					ListMap<Object>listmap = (ListMap<Object>)result.value;
-					for(Entry<String, Object> entry : listmap.entrySet()) {
-						environment.define(entry.getKey(), new Result(entry.getValue(), Interpreter.typeFromValue(entry.getValue())), false, true);
+					ListMap<Object> listmap = (ListMap<Object>) result.value;
+					for (Entry<String, Object> entry : listmap.entrySet()) {
+						environment.define(entry.getKey(),
+								new Result(entry.getValue(), Interpreter.typeFromValue(entry.getValue())), false, true);
 					}
 				}
 			} catch (ReturnJump ret) {
 				System.out.println("Program exited with: " + stringify(ret.value));
-				return;
+				return ret.value;
 			} catch (MuException me) {
 				if (environment.get("$this") != null) {
-					Template tmpl = (Template) environment.get("$this").value;
-					if (tmpl.errors != null && !tmpl.errors.isEmpty()) {
-						Stack<Block> handlers = tmpl.errors;
-						environment.define("$exception", new Result(me, Type.Exception), false, false);
-						for (Block block : handlers) {
-							executeBlock(block.expressions, environment);
+					try {
+						Template tmpl = (Template) environment.get("$this").value;
+						if (tmpl.errors != null && !tmpl.errors.isEmpty()) {
+							Stack<Block> handlers = tmpl.errors;
+							environment.define("$exception", new Result(me, Type.Exception), false, false);
+							for (Block block : handlers) {
+								executeBlock(block.expressions, environment);
+							}
+							continue;
 						}
-						continue;
+					} catch (ClassCastException e) {
+						// for now
 					}
 				}
 				me.expr = current;
 				me.line = current.line;
 				handler.error(me);
+				return new Result(null, Type.Void);
 			} catch (InterpreterError e) {
 				e.expr = current;
 				e.line = current.line;
 				handler.error(e);
+				return new Result(null, Type.Void);
 			} catch (Exception e) {
 				InterpreterError ie = new InterpreterError(e);
 				ie.expr = current;
 				ie.line = current.line;
 				handler.error(ie);
+				return new Result(null, Type.Void);
 			}
 		}
+		return result;
 	}
 
 	Result evaluate(Expr expr) {
@@ -190,7 +202,7 @@ public class Interpreter {
 		// $date
 		environment.define("$date", new Result(sdf.format(new Date()), Type.String), true, true);
 		// $time
-		environment.define("$time", new Result(sdtf.format(new Date()), Type.String), true, true);		
+		environment.define("$time", new Result(sdtf.format(new Date()), Type.String), true, true);
 	}
 
 	private void updateMacros(int line, String func) {
@@ -203,10 +215,9 @@ public class Interpreter {
 		// $date
 		environment.define("$date", new Result(sdf.format(new Date()), Type.String), true, true);
 		// $time
-		environment.define("$time", new Result(sdtf.format(new Date()), Type.String), true, true);		
+		environment.define("$time", new Result(sdtf.format(new Date()), Type.String), true, true);
 	}
 
-	
 	/* invoke binary operator */
 	Result invoke(String op, Result left, Result right, Signature sig) {
 
@@ -233,8 +244,8 @@ public class Interpreter {
 				}
 				throw new InterpreterError("No such operator: %s %s %s", left.type, op, right.type);
 			}
-		} else if(func instanceof Template) {
-			Template tmpl = (Template)func;
+		} else if (func instanceof Template) {
+			Template tmpl = (Template) func;
 			List<Expr> exprs = new ArrayList<>();
 			exprs.add(new Expr.Literal(currentLine, left.value));
 			exprs.add(new Expr.Literal(currentLine, right.value));
@@ -261,8 +272,8 @@ public class Interpreter {
 			} catch (Exception e) {
 				throw new InterpreterError("Error invoking operator: %s %s", op, arg.type);
 			}
-		} else if(func instanceof Template) {
-			Template tmpl = (Template)func;
+		} else if (func instanceof Template) {
+			Template tmpl = (Template) func;
 			List<Expr> exprs = new ArrayList<>();
 			exprs.add(new Expr.Literal(currentLine, arg.value));
 			Expr.Map args = new Expr.Map(currentLine, exprs);
@@ -504,6 +515,18 @@ public class Interpreter {
 			Object value = ((Map.Entry<?, ?>) listMap.value).getValue();
 			return new Result(value, typeFromValue(value));
 		}
+		if (listMap.value instanceof Type) {
+			Map<Signature, Object> interfaces = ((Type) listMap.value).interfaces();
+			for (Entry<Signature, Object> entry : interfaces.entrySet()) {
+				if (entry.getKey().name.equals(key)) {
+					Object value = entry.getValue();
+					if (value instanceof Method) {
+						value = JavaHelper.calleeFromMethod(this, (Method) value, null);
+					}
+					return new Result(value, typeFromValue(value));
+				}
+			}
+		}
 		if (listMap.value instanceof Template) {
 			Template tmpl = (Template) listMap.value;
 			Result value = tmpl.closure.get(key);
@@ -523,7 +546,7 @@ public class Interpreter {
 			Result value = callee.closure.get(key);
 			if (value == null && callee.parent.attributes.containsKey("jvm")) {
 				value = callee.closure.get("__jvm_" + key);
-				((Callee)value.value).javaObject = callee.javaObject;
+				((Callee) value.value).javaObject = callee.javaObject;
 			}
 			/* not found in current object, try mixins */
 			if (value == null) {
@@ -704,6 +727,9 @@ public class Interpreter {
 		if (val instanceof Pointer) {
 			return new Type.RefType(((Pointer) val).type);
 		}
+		if (val instanceof Future) {
+			return Type.Future;
+		}
 		System.err.println("Type is " + val.getClass());
 		return Type.None;
 	}
@@ -714,6 +740,19 @@ public class Interpreter {
 			return "nil";
 		if (obj.value instanceof Integer) {
 			return "'" + new String(Character.toChars((Integer) obj.value)) + "'";
+		}
+		if (obj.value instanceof BigInteger) {
+			return obj.value.toString();
+		}
+		if (obj.value instanceof Future) {
+			try {
+				Future<?> future = (Future<?>) obj.value;
+				if (future.isDone())
+					return "Future (" + future.get() + ")";
+				return "Future (unresolved)";
+			} catch (Exception e) {
+
+			}
 		}
 		if (obj.value instanceof String) {
 			return "\"" + obj.value + "\"";
@@ -729,6 +768,11 @@ public class Interpreter {
 			Map.Entry<String, Object> e = (Entry<String, Object>) obj.value;
 			map.put(e.getKey(), e.getValue());
 			return stringifyMap(map);
+		}
+		if (obj.value instanceof Callee) {
+			Callee callee = (Callee) obj.value;
+			if (callee.javaObject != null)
+				return callee.javaObject.toString();
 		}
 		return obj.value.toString();
 	}
@@ -809,7 +853,7 @@ public class Interpreter {
 				// null => false
 				return false;
 			} else {
-				throw new InterpreterError("Criterion may not be nil");
+				throw new MuException("Criterion may not be nil");
 			}
 		}
 
@@ -851,10 +895,17 @@ public class Interpreter {
 			}
 		}
 
+		if (value instanceof Future) {
+			if ((flags & 2) != 0) {
+				Future<?> future = (Future<?>)value;
+				return future.isDone();
+			}
+		}
+
 		if (flags != 0) {
 			return true;
 		} else {
-			throw new InterpreterError("Criterion must be Bool");
+			throw new MuException("Criterion must be Bool");
 		}
 	}
 

@@ -199,10 +199,12 @@ class Parser {
 			returnType = typeLiteral(null);
 		}
 
-		if(!isTypedef && !attributes.containsKey("jvm")) {
+		if(!isTypedef) {
 			consume(COLON, String.format("Must supply a %s body after colon", kind.toLowerCase()));
 			if (match(LEFT_PAREN)) {
 					body = (Block) block();
+			} else if(match(STRING) && attributes.containsKey("jvm")) {
+				attributes.put("jvm", (String)previous().literal);
 			} else {
 				throw new ParserError("Must supply a %s body", kind.toLowerCase());
 			}
@@ -763,6 +765,11 @@ class Parser {
 		return new Expr.Return(token.line, value);
 	}
 
+	private Expr startExpression(Token token) {
+		Expr value = declaration();
+		return new Expr.Start(token.line, value);
+	}
+
 	private Expr breakStatement(Token name) {
 		if (looplevel <= 0)
 			throw new ParserError("Break statement must be inside a loop");
@@ -920,7 +927,7 @@ class Parser {
 			return whileExpression(previous());
 		if (match(SELECT))
 			return selectExpression(previous());
-		return or();
+		return logical();
 	}
 
 	private Expr forExpression(Token name) {
@@ -983,20 +990,27 @@ class Parser {
 		if (match(ELSE)) {
 			elseBranch = block();
 		}
-		return new Expr.If(name.lexeme, name.line, condition, thenBranch, elseBranch, criteria);
+		return new Expr.If(name.lexeme, name.line, condition, thenBranch, elseBranch, name.lexeme.equals("unless"), criteria);
 	}
 
 	private Expr doWhileExpression(Token name) {
 		try {
 			looplevel++;
 			Expr.Block body = (Block) block();
-			consume(WHILE, "Expect 'while' in a do-while loop");
+			boolean invert;
+			if(match(WHILE))
+				invert = false;			
+			else if(match(UNTIL)) {
+				invert = true;
+			} else {
+				throw new ParserError("Excpect WHILE or UNTIL after DO...");
+			}
 			Expr condition = expression();
 			Expr.Set criteria = null;
 			if(match(LEFT_BRACE)) {
 				criteria = (Expr.Set)set();
 			}
-			body.expressions.add(new Expr.While(name.lexeme, name.line, condition, body, null, criteria));
+			body.expressions.add(new Expr.While(name.lexeme, name.line, condition, body, null, invert, criteria));
 			return new Expr.Block(name.line, body.expressions);
 		} catch(Exception e) {
 			throw new ParserError("Unexpected error");
@@ -1011,6 +1025,7 @@ class Parser {
 			criteria = (Expr.Set)set();
 		}
 		Expr condition = expression();
+		boolean invert = name.lexeme.equals("until");
 		try {
 			looplevel++;
 			Expr body = block();
@@ -1018,7 +1033,7 @@ class Parser {
 			if (match(AFTER)) {
 				atEnd = block();
 			}
-			return new Expr.While(name.lexeme, name.line, condition, body, atEnd, criteria);
+			return new Expr.While(name.lexeme, name.line, condition, body, atEnd, invert, criteria);
 		} catch(Exception e) {
 			throw new ParserError("Unexpected error %", e);
 		} finally {
@@ -1048,19 +1063,19 @@ class Parser {
 		return new Expr.Select(name.line, condition, whenExpressions, whenBranches, elseBranch);
 	}
 
-	private Expr or() {
-		Expr expr = and();
+	private Expr logical() {
+		Expr expr = eqcomp();
 		while (match(OR)) {
 			Token operator = previous();
-			Expr right = and();
+			Expr right = eqcomp();
 			expr = new Expr.Binary(operator.line, expr, operator.lexeme, right);
 		}
-		return expr;
-	}
-
-	private Expr and() {
-		Expr expr = eqcomp();
 		while (match(AND)) {
+			Token operator = previous();
+			Expr right = eqcomp();
+			expr = new Expr.Binary(operator.line, expr, operator.lexeme, right);
+		}
+		while (match(XOR)) {
 			Token operator = previous();
 			Expr right = eqcomp();
 			expr = new Expr.Binary(operator.line, expr, operator.lexeme, right);
@@ -1117,7 +1132,7 @@ class Parser {
 	}
 	
 	private Expr term() {
-		Expr expr = sqrt();
+		Expr expr = factor();
 		while (match(MINUS, PLUS)) {
 			Token operator = previous();
 			Expr right = factor();
@@ -1126,91 +1141,92 @@ class Parser {
 		return expr;
 	}
 
-	private Expr sqrt() {
-		if (match(SQRT)) {
-			Token operator = previous();
-			Expr right = factor();
-			return new Expr.Unary(operator.line, operator.lexeme, right);
-		}
-		return factor();
-	}
-
 	private Expr factor() {
-		Expr expr = unary();
+		Expr expr = exponent();
 
 		while (match(SLASH, STAR, PERCENT)) {
 			Token operator = previous();
-			Expr right = unary();
+			Expr right = exponent();
 			expr = new Expr.Binary(operator.line, expr, operator.lexeme, right);
 		}
 		
 		if (match(IN, AS)) {
 			Token operator = previous();
-			Expr right = unary();
+			Expr right = exponent();
 			expr = new Expr.Binary(operator.line, expr, operator.lexeme, right);
 		}
-
 		return expr;
-	}
-
-	private Expr unary() {
-		if (match(NOT, MINUS, PLUS)) {
-			Token operator = previous();
-			Expr right = unary();
-			return new Expr.Unary(operator.line, operator.lexeme, right);
-		}
-		if (match(BACKSLASH)) {
-			Token operator = previous();
-			Expr right = unary();
-			match(BACKSLASH);
-			return new Expr.Unary(operator.line, operator.lexeme, right);
-		}
-		return exponent();
 	}
 
 	private Expr exponent() {
 		Expr expr = prefix();
-		if (match(POW, XOR)) {
+		if (match(POW)) {
 			Token operator = previous();
-			Expr right = unary();
+			Expr right = prefix();
 			return new Expr.Binary(operator.line, expr, operator.lexeme, right);
 		}
 		return expr;
 	}
 
 	private Expr prefix() {
-		if (match(PLUSPLUS, MINMIN, ATSIGN, UPARROW, STAR)) {
+		if(match(SQRT)) {
 			Token operator = previous();
-			Expr right = primary();
-			return new Expr.Unary(operator.line, operator.lexeme, right);
+			fix();
+			Expr right = prefix();
+			return new Expr.Unary(operator.line, operator.lexeme, right);		
 		}
+		if (match(NOT, MINUS, PLUS)) {
+			Token operator = previous();
+			fix();
+			Expr right = prefix();
+			return new Expr.Unary(operator.line, operator.lexeme, right);		
+		}
+		if (match(BACKSLASH)) {
+			Token operator = previous();
+			fix();
+			Expr right = expression();
+			consume(BACKSLASH, "Expect backslash");
+			return new Expr.Unary(operator.line, operator.lexeme, right);		
+		}
+		if (match(ABS)) {
+			Token operator = previous();
+			fix();
+			Expr right = prefix();
+			return new Expr.Unary(operator.line, operator.lexeme, right);		
+		}
+		if (match(PLUSPLUS, MINMIN, ATSIGN, STAR)) {
+			Token operator = previous();
+			fix();
+			Expr right = prefix();
+			return new Expr.Unary(operator.line, operator.lexeme, right);		
+		}
+		if (match(START))
+			return startExpression(previous());
 		return postfix();
 	}
 
+	private void fix() {
+		// fix LPAREN_CALL after prefix
+		if(peek().type.equals(LPAREN_CALL)) {
+			tokens.get(current).type = LEFT_PAREN;
+		}
+	}
+	
 	private Expr postfix() {
-		if (matchNext(PLUSPLUS, MINMIN, BANG)) {
+		if (matchNext(PLUSPLUS, MINMIN, BANG, UPARROW)) {
 			Token operator = peek();
 			current--;
-			Expr left = primary();
+			Expr left = selector();
 			advance();
 			return new Expr.Postfix(operator.line, left, operator.lexeme);
-		}
-		return builtins();
-	}
-
-	private Expr builtins() {
-		if (match(ABS)) {
-			Token operator = previous();
-			Expr right = selector();
-			return new Expr.Unary(operator.line, operator.lexeme, right);
 		}
 		return selector();
 	}
 
 	private Expr selector() {
-		/* aggregate literals here */
-
+		
 		Expr last = primary();
+		
 		while (match(LEFT_BRK, LPAREN_CALL, DOT, SAFENAV, SAFESUB, SAFECALL)) {
 			if(previous().type.equals(LEFT_BRK)) {
 				/* LIST or RANGE or SUBSCRIPT */
@@ -1255,7 +1271,6 @@ class Parser {
 				last = new Expr.Dot(last, new Expr.Variable(name.lexeme, name.line), true);
 			}
 		}
-
 		return last;
 	}
 
